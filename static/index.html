@@ -710,12 +710,13 @@
                             <div>
                                 <label class="block font-bold text-slate-700 mb-1">بازار مقصد / استان</label>
                                 <input type="text" id="seller-dest-input" value="Iran" placeholder="Iran یا نام کشور خارجی" class="w-full p-2.5 border border-slate-200 rounded-xl">
+                                <input type="hidden" id="seller-origin-input" value="Iran">
                             </div>
                             <div>
                                 <label class="block font-bold text-slate-700 mb-1">قیمت واحد (USD یا تومان)</label>
                                 <div class="flex gap-2">
                                     <input type="number" id="seller-cost-input" placeholder="اختیاری" class="w-full p-2.5 border border-slate-200 rounded-xl font-bold">
-                                    <button onclick="handleSellerJourney()" class="px-5 py-2.5 bg-matte hover:bg-black text-white font-bold rounded-xl shadow-xs shrink-0 flex items-center gap-1">
+                                    <button id="seller-analyze-btn" onclick="handleSellerJourney()" class="px-5 py-2.5 bg-matte hover:bg-black text-white font-bold rounded-xl shadow-xs shrink-0 flex items-center gap-1">
                                         <i data-lucide="sparkles" class="w-4 h-4"></i>
                                         <span>تحلیل</span>
                                     </button>
@@ -864,11 +865,11 @@
                                 </div>
 
                                 <div class="md:col-span-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                    <div class="font-bold text-xs text-slate-700 mb-2.5 flex justify-between">
-                                        <span>خریداران بالقوه تطبیق‌داده‌شده (Candidate Buyers)</span>
-                                        <span class="text-[10px] text-purple-600 font-bold">اولویت شبکه اختصاصی</span>
+                                    <div class="font-bold text-xs text-slate-700 mb-2.5 flex justify-between items-center">
+                                        <span>خریداران بالقوه و کارخانجات متقاضی (Off-takers & Buyers)</span>
+                                        <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-black" id="seller-buyers-count-badge">-- خریدار شناسایی‌شده</span>
                                     </div>
-                                    <div class="space-y-2 max-h-[260px] overflow-y-auto pr-1" id="seller-buyers-list"></div>
+                                    <div class="space-y-2.5 max-h-[520px] overflow-y-auto pr-1" id="seller-buyers-list"></div>
                                 </div>
                             </div>
 
@@ -2089,13 +2090,33 @@
 
         // 1. Journey 1: Seller
         async function handleSellerJourney() {
-            const p = document.getElementById('seller-product-input').value.trim();
-            const orig = document.getElementById('seller-origin-input').value.trim() || 'Iran';
-            const dest = document.getElementById('seller-dest-input').value.trim() || (currentMarketFocus === 'domestic' ? 'Iran' : 'India');
-            const cost = parseFloat(document.getElementById('seller-cost-input').value) || null;
-            const batchQty = parseFloat(document.getElementById('seller-batch-qty')?.value) || 3000;
+            const btn = document.getElementById('seller-analyze-btn');
+            const originalBtnHtml = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i><span>در حال تحلیل و استخراج خریداران...</span>`;
+                if (window.lucide) lucide.createIcons();
+            }
 
-            if (!p) return alert('لطفاً نام کالا را وارد کنید.');
+            const prodEl = document.getElementById('seller-product-input');
+            const p = prodEl ? prodEl.value.trim() : '';
+            const origEl = document.getElementById('seller-origin-input');
+            const orig = (origEl ? origEl.value.trim() : '') || 'Iran';
+            const destEl = document.getElementById('seller-dest-input');
+            const dest = (destEl ? destEl.value.trim() : '') || (currentMarketFocus === 'domestic' ? 'Iran' : 'India');
+            const costEl = document.getElementById('seller-cost-input');
+            const cost = costEl && costEl.value ? parseFloat(costEl.value) : null;
+            const batchQtyEl = document.getElementById('seller-batch-qty');
+            const batchQty = batchQtyEl && batchQtyEl.value ? parseFloat(batchQtyEl.value) : 3000;
+
+            if (!p) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalBtnHtml;
+                    if (window.lucide) lucide.createIcons();
+                }
+                return alert('لطفاً نام کالا را وارد کنید.');
+            }
 
             try {
                 const res = await fetch('/api/trade-hub/journey/seller', {
@@ -2110,10 +2131,19 @@
                         unit_name: 'Tons'
                     })
                 });
+                if (!res.ok) {
+                    throw new Error(`خطای سرور: کد وضعیت ${res.status}`);
+                }
                 const d = await res.json();
                 latestSellerDossier = d;
 
-                document.getElementById('seller-results-container').classList.remove('hidden');
+                const resultsContainer = document.getElementById('seller-results-container');
+                if (resultsContainer) {
+                    resultsContainer.classList.remove('hidden');
+                    setTimeout(() => {
+                        resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 80);
+                }
 
                 // Domestic Intelligence Card rendering
                 const domCard = document.getElementById('seller-domestic-card');
@@ -2123,17 +2153,25 @@
                     const totalToman = Number(ds.total_valuation_toman || 0);
                     const totalBillions = (totalToman / 1000000000).toFixed(1);
 
-                    document.getElementById('seller-dom-total-toman').innerText = totalToman.toLocaleString() + ' تومان';
-                    document.getElementById('seller-dom-total-billions').innerText = `${totalBillions} میلیارد تومان (${(totalToman * 10).toLocaleString()} ریال)`;
+                    const elTotal = document.getElementById('seller-dom-total-toman');
+                    if (elTotal) elTotal.innerText = totalToman.toLocaleString() + ' تومان';
+                    const elBil = document.getElementById('seller-dom-total-billions');
+                    if (elBil) elBil.innerText = `${totalBillions} میلیارد تومان (${(totalToman * 10).toLocaleString()} ریال)`;
                     
-                    document.getElementById('seller-dom-unit-price').innerText = Number(ds.unit_price_toman_kg || 0).toLocaleString() + ' تومان/کیلو';
+                    const elUnitP = document.getElementById('seller-dom-unit-price');
+                    if (elUnitP) elUnitP.innerText = Number(ds.unit_price_toman_kg || 0).toLocaleString() + ' تومان/کیلو';
+                    
                     const minP = Number(ds.min_batch_valuation_toman || 0) / Number(ds.total_volume_kg || 1);
                     const maxP = Number(ds.max_batch_valuation_toman || 0) / Number(ds.total_volume_kg || 1);
-                    document.getElementById('seller-dom-price-range').innerText = `محدوده نرخ روز: ${Math.round(minP).toLocaleString()} تا ${Math.round(maxP).toLocaleString()} تومان`;
+                    const elRange = document.getElementById('seller-dom-price-range');
+                    if (elRange) elRange.innerText = `محدوده نرخ روز: ${Math.round(minP).toLocaleString()} تا ${Math.round(maxP).toLocaleString()} تومان`;
                     
-                    document.getElementById('seller-dom-trucks').innerText = `${ds.trucks_needed || '--'} دستگاه تریلی`;
-                    document.getElementById('seller-dom-hs').innerText = `HS: ${ds.hs_code || d.hs_code_primary}`;
-                    document.getElementById('seller-dom-commodity-name').innerText = `${ds.commodity_name || d.product_name_fa} (${ds.total_volume_tons || batchQty} تن)`;
+                    const elTrucks = document.getElementById('seller-dom-trucks');
+                    if (elTrucks) elTrucks.innerText = `${ds.trucks_needed || '--'} دستگاه تریلی`;
+                    const elHs = document.getElementById('seller-dom-hs');
+                    if (elHs) elHs.innerText = `HS: ${ds.hs_code || d.hs_code_primary}`;
+                    const elComm = document.getElementById('seller-dom-commodity-name');
+                    if (elComm) elComm.innerText = `${ds.commodity_name || d.product_name_fa} (${ds.total_volume_tons || batchQty} تن)`;
 
                     // Consuming industries
                     const indList = document.getElementById('seller-dom-industries-list');
@@ -2188,18 +2226,26 @@
                 }
 
                 // Global / HS stats
-                document.getElementById('seller-hs-badge').innerText = `HS: ${d.hs_code_primary}`;
-                document.getElementById('seller-hs-confidence').innerText = `${Math.round((d.hs_code_candidates[0] ? d.hs_code_candidates[0].confidence_score : 0.9) * 100)}% انطباق تخصصی`;
-                document.getElementById('seller-market-size').innerText = `$${(d.market_size_usd / 1000000).toFixed(1)}M USD`;
-                document.getElementById('seller-market-growth').innerText = `رشد سالانه: ${d.annual_market_growth_pct}%`;
+                const elHsBadge = document.getElementById('seller-hs-badge');
+                if (elHsBadge) elHsBadge.innerText = `HS: ${d.hs_code_primary}`;
+                const elHsConf = document.getElementById('seller-hs-confidence');
+                if (elHsConf) elHsConf.innerText = `${Math.round((d.hs_code_candidates[0] ? d.hs_code_candidates[0].confidence_score : 0.9) * 100)}% انطباق تخصصی`;
+                const elMktSize = document.getElementById('seller-market-size');
+                if (elMktSize) elMktSize.innerText = `$${(d.market_size_usd / 1000000).toFixed(1)}M USD`;
+                const elMktGrowth = document.getElementById('seller-market-growth');
+                if (elMktGrowth) elMktGrowth.innerText = `رشد سالانه: ${d.annual_market_growth_pct}%`;
                 
                 if (d.export_cost_estimate) {
-                    document.getElementById('seller-margin-badge').innerText = `${d.export_cost_estimate.profit_margin_pct}%`;
-                    document.getElementById('seller-profit-unit').innerText = `$${d.export_cost_estimate.net_profit_per_unit_usd} سود هر واحد`;
+                    const elMargin = document.getElementById('seller-margin-badge');
+                    if (elMargin) elMargin.innerText = `${d.export_cost_estimate.profit_margin_pct}%`;
+                    const elProfitU = document.getElementById('seller-profit-unit');
+                    if (elProfitU) elProfitU.innerText = `$${d.export_cost_estimate.net_profit_per_unit_usd} سود هر واحد`;
                 }
 
-                document.getElementById('seller-data-confidence').innerText = `${d.data_confidence_score}%`;
-                document.getElementById('seller-tariff-text').innerText = d.tariff_barriers_summary;
+                const elDataConf = document.getElementById('seller-data-confidence');
+                if (elDataConf) elDataConf.innerText = `${d.data_confidence_score}%`;
+                const elTariff = document.getElementById('seller-tariff-text');
+                if (elTariff) elTariff.innerText = d.tariff_barriers_summary;
 
                 // Render direct verified links to Trade Map and UN Comtrade
                 const linksContainer = document.getElementById('seller-direct-links');
@@ -2227,96 +2273,117 @@
 
                 // Top importers
                 const impList = document.getElementById('seller-top-importers-list');
-                impList.innerHTML = '';
-                (d.top_importing_countries || []).forEach((c, idx) => {
-                    const row = document.createElement('div');
-                    row.className = 'p-2.5 bg-white rounded-xl border border-slate-100 flex justify-between items-center text-xs shadow-2xs';
-                    row.innerHTML = `
-                        <div>
-                            <span class="font-black text-slate-800">${idx+1}. ${c.country_destination}</span>
-                            <span class="text-[10px] text-slate-400 block">${c.notes}</span>
-                        </div>
-                        <div class="text-left">
-                            <span class="font-extrabold text-matte font-mono">$${(c.trade_value_usd / 1000000).toFixed(1)}M</span>
-                            <span class="text-[10px] text-emerald-600 block font-bold">+${c.annual_growth_rate_pct}%</span>
-                        </div>
-                    `;
-                    impList.appendChild(row);
-                });
-
-                // Candidate buyers (Domestic + Global)
-                const buyList = document.getElementById('seller-buyers-list');
-                buyList.innerHTML = '';
-                (d.candidate_buyers || []).forEach(b => {
-                    const row = document.createElement('div');
-                    
-                    if (b.buyer_type || b.city_province) {
-                        // Rich Iranian Domestic Buyer Card
-                        row.className = 'p-3 bg-white rounded-2xl border border-slate-200 hover:border-emerald-300 transition-all text-xs shadow-2xs space-y-2';
-                        row.innerHTML = `
-                            <div class="flex justify-between items-start gap-2">
-                                <div>
-                                    <div class="font-black text-slate-900 text-sm flex items-center gap-1.5">
-                                        <span>${b.entity_name}</span>
-                                        <span class="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">خریدار مستقیم ایران</span>
-                                    </div>
-                                    <div class="text-[11px] text-slate-600 font-semibold mt-0.5">${b.buyer_type || ''}</div>
-                                </div>
-                                <div class="text-left shrink-0">
-                                    <span class="font-extrabold text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-200">${b.overall_match_score}% تطابق</span>
-                                </div>
-                            </div>
-                            
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-1.5 text-[11px] bg-slate-50 p-2 rounded-xl">
-                                <div><strong class="text-slate-500">📍 موقعیت و انبار:</strong> <span class="font-bold text-slate-800">${b.city_province || 'سراسری'}</span></div>
-                                <div><strong class="text-slate-500">📦 ظرفیت خرید:</strong> <span class="font-bold text-slate-800">${b.purchasing_capacity || 'متناسب با سفارش'}</span></div>
-                                <div><strong class="text-slate-500">💳 روش تسویه:</strong> <span class="font-bold text-slate-800">${b.payment_terms_expected || 'نقدی / اعتباری'}</span></div>
-                                <div><strong class="text-slate-500">📞 واحد تماس:</strong> <span class="font-bold text-blue-700 font-mono">${b.contact_channel || 'دبیرخانه بازرگانی'}</span></div>
-                            </div>
-
-                            <div class="flex items-center justify-between pt-1 border-t border-slate-100">
-                                <span class="text-[10px] text-slate-500">💡 اقدام پیشنهادی: ${b.recommended_action}</span>
-                                <button onclick="quickAddContactFromBuyer('${b.entity_name}', '${b.city_province || 'Iran'}')" class="px-2.5 py-1 bg-matte hover:bg-black text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-1">
-                                    <i data-lucide="user-plus" class="w-3 h-3"></i>
-                                    <span>ثبت در مخاطبان CRM</span>
-                                </button>
-                            </div>
-                        `;
-                    } else {
-                        // Standard International Candidate Card
-                        const netBadge = b.is_private_network ? '<span class="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold mr-1">شبکه اختصاصی من</span>' : '<span class="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-bold mr-1">دایرکتوری معتبر</span>';
+                if (impList) {
+                    impList.innerHTML = '';
+                    (d.top_importing_countries || []).forEach((c, idx) => {
+                        const row = document.createElement('div');
                         row.className = 'p-2.5 bg-white rounded-xl border border-slate-100 flex justify-between items-center text-xs shadow-2xs';
                         row.innerHTML = `
                             <div>
-                                <div class="font-black text-slate-800 flex items-center">${b.entity_name} ${netBadge}</div>
-                                <span class="text-[10px] text-slate-400">${b.entity_country} • ${b.recommended_action}</span>
+                                <span class="font-black text-slate-800">${idx+1}. ${c.country_destination}</span>
+                                <span class="text-[10px] text-slate-400 block">${c.notes}</span>
                             </div>
                             <div class="text-left">
-                                <span class="font-bold text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">${b.overall_match_score}% تطابق</span>
+                                <span class="font-extrabold text-matte font-mono">$${(c.trade_value_usd / 1000000).toFixed(1)}M</span>
+                                <span class="text-[10px] text-emerald-600 block font-bold">+${c.annual_growth_rate_pct}%</span>
                             </div>
                         `;
-                    }
-                    buyList.appendChild(row);
-                });
+                        impList.appendChild(row);
+                    });
+                }
+
+                // Candidate buyers (Domestic + Global)
+                const buyList = document.getElementById('seller-buyers-list');
+                const buyersCountBadge = document.getElementById('seller-buyers-count-badge');
+                if (buyersCountBadge) {
+                    const totalCount = (d.candidate_buyers || []).length;
+                    buyersCountBadge.innerText = `${totalCount} خریدار فعال شناسایی‌شده`;
+                }
+
+                if (buyList) {
+                    buyList.innerHTML = '';
+                    (d.candidate_buyers || []).forEach(b => {
+                        const row = document.createElement('div');
+                        
+                        if (b.buyer_type || b.city_province) {
+                            // Rich Iranian Domestic Buyer Card
+                            row.className = 'p-3 bg-white rounded-2xl border border-slate-200 hover:border-emerald-400 hover:shadow-xs transition-all text-xs shadow-2xs space-y-2';
+                            row.innerHTML = `
+                                <div class="flex justify-between items-start gap-2">
+                                    <div>
+                                        <div class="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                                            <span>${b.entity_name}</span>
+                                            <span class="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">خریدار مستقیم ایران</span>
+                                        </div>
+                                        <div class="text-[11px] text-slate-600 font-semibold mt-0.5">${b.buyer_type || ''}</div>
+                                    </div>
+                                    <div class="text-left shrink-0">
+                                        <span class="font-extrabold text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-200">${b.overall_match_score}% تطابق</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-1.5 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                    <div><strong class="text-slate-500">📍 موقعیت و انبار:</strong> <span class="font-bold text-slate-800">${b.city_province || 'سراسری'}</span></div>
+                                    <div><strong class="text-slate-500">📦 ظرفیت خرید:</strong> <span class="font-bold text-slate-800">${b.purchasing_capacity || 'متناسب با سفارش'}</span></div>
+                                    <div><strong class="text-slate-500">💳 روش تسویه:</strong> <span class="font-bold text-slate-800">${b.payment_terms_expected || 'نقدی / اعتباری'}</span></div>
+                                    <div><strong class="text-slate-500">📞 واحد تماس:</strong> <span class="font-bold text-blue-700 font-mono">${b.contact_channel || 'دبیرخانه بازرگانی'}</span></div>
+                                </div>
+
+                                <div class="flex items-center justify-between pt-1 border-t border-slate-100 gap-2">
+                                    <span class="text-[10px] text-slate-500 truncate">💡 اقدام پیشنهادی: ${b.recommended_action}</span>
+                                    <button onclick="quickAddContactFromBuyer('${b.entity_name}', '${b.city_province || 'Iran'}')" class="px-2.5 py-1 bg-matte hover:bg-black text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 shrink-0">
+                                        <i data-lucide="user-plus" class="w-3 h-3"></i>
+                                        <span>ثبت در مخاطبان CRM</span>
+                                    </button>
+                                </div>
+                            `;
+                        } else {
+                            // Standard International Candidate Card
+                            const netBadge = b.is_private_network ? '<span class="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold mr-1">شبکه اختصاصی من</span>' : '<span class="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-bold mr-1">دایرکتوری معتبر</span>';
+                            row.className = 'p-2.5 bg-white rounded-xl border border-slate-100 flex justify-between items-center text-xs shadow-2xs';
+                            row.innerHTML = `
+                                <div>
+                                    <div class="font-black text-slate-800 flex items-center">${b.entity_name} ${netBadge}</div>
+                                    <span class="text-[10px] text-slate-400">${b.entity_country} • ${b.recommended_action}</span>
+                                </div>
+                                <div class="text-left">
+                                    <span class="font-bold text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">${b.overall_match_score}% تطابق</span>
+                                </div>
+                            `;
+                        }
+                        buyList.appendChild(row);
+                    });
+                }
 
                 // Pitches
-                document.getElementById('seller-pitch-fa').innerText = d.draft_sales_pitch_fa;
-                document.getElementById('seller-pitch-en').innerText = d.draft_sales_pitch_en;
+                const elPitchFa = document.getElementById('seller-pitch-fa');
+                if (elPitchFa) elPitchFa.innerText = d.draft_sales_pitch_fa;
+                const elPitchEn = document.getElementById('seller-pitch-en');
+                if (elPitchEn) elPitchEn.innerText = d.draft_sales_pitch_en;
 
                 // Roadmap
                 const rmList = document.getElementById('seller-roadmap-list');
-                rmList.innerHTML = '';
-                (d.action_roadmap || []).forEach(step => {
-                    const li = document.createElement('li');
-                    li.className = 'py-0.5';
-                    li.innerText = step;
-                    rmList.appendChild(li);
-                });
+                if (rmList) {
+                    rmList.innerHTML = '';
+                    (d.action_roadmap || []).forEach(step => {
+                        const li = document.createElement('li');
+                        li.className = 'py-0.5';
+                        li.innerText = step;
+                        rmList.appendChild(li);
+                    });
+                }
 
-                lucide.createIcons();
+                if (window.lucide) lucide.createIcons();
 
             } catch (err) {
-                alert('خطا در تحلیل مسیر صادرات');
+                console.error('Error in handleSellerJourney:', err);
+                alert('خطا در تحلیل: ' + (err.message || 'لطفاً اتصال اینترنت یا سرور را بررسی نمایید.'));
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalBtnHtml;
+                    if (window.lucide) lucide.createIcons();
+                }
             }
         }
 
