@@ -159,3 +159,86 @@ def test_trade_ai_assistant():
     assert "FORMAL REQUEST FOR QUOTATION" in rfq_letter
     assert "7209.16" in rfq_letter
     assert "1,500.00 Tons" in rfq_letter
+
+
+def test_journey_seller_dynamic_products(temp_db):
+    """Verifies that Journey 1 dynamically analyzes any product entered by the user."""
+    registry = TradeSourcesRegistry()
+    network_repo = TradeNetworkRepository(temp_db)
+    engine = SellerJourneyEngine(db=temp_db, registry=registry, network_repo=network_repo)
+
+    # 1. Saffron
+    dossier_saffron = engine.execute(product_name="زعفران نگین قائنات")
+    assert dossier_saffron.hs_code_primary == "0910.20"
+    assert "Spain" in [c.country_destination for c in dossier_saffron.top_importing_countries]
+    assert dossier_saffron.export_cost_estimate is not None
+    assert any("trademap.org" in src for src in dossier_saffron.sources_cited)
+
+    # 2. Ceramic Tiles
+    dossier_tiles = engine.execute(product_name="کاشی پرسلان لعاب‌دار")
+    assert dossier_tiles.hs_code_primary == "6907.21"
+    assert "Iraq" in [c.country_destination for c in dossier_tiles.top_importing_countries]
+
+    # 3. Urea
+    dossier_urea = engine.execute(product_name="کود اوره گرانول")
+    assert dossier_urea.hs_code_primary == "3102.10"
+    assert "Brazil" in [c.country_destination for c in dossier_urea.top_importing_countries]
+
+    # 4. Steel Rebar
+    dossier_steel = engine.execute(product_name="میلگرد آجدار A3")
+    assert dossier_steel.hs_code_primary == "7214.20"
+
+    # 5. Explicit HS code in query
+    dossier_hs = engine.execute(product_name="صادرات با کد 080251")
+    assert dossier_hs.hs_code_primary == "0802.51"
+
+    # 6. Unlisted Agrifood product
+    dossier_food = engine.execute(product_name="روغن زیتون فرابکر")
+    assert len(dossier_food.top_importing_countries) > 0
+    assert len(dossier_food.candidate_buyers) > 0
+
+
+def test_trademap_adapter_parse_csv_export():
+    """Verifies parsing of authentic ITC Trade Map CSV/TSV table export."""
+    from trade_hub.sources.trademap import TradeMapAdapter
+
+    sample_trademap_tsv = (
+        "Importers\tValue imported in 2023 (USD thousand)\tValue imported in 2024 (USD thousand)\t"
+        "Quantity imported in 2024\tUnit value (USD/unit)\tAnnual growth in value between 2020-2024 (%)\tShare in world imports (%)\n"
+        "World\t3200000\t3450000\t450000\t7666\t4.5\t100\n"
+        "Germany\t450000\t490000\t60000\t8166\t5.2\t14.2\n"
+        "China\t380000\t410000\t55000\t7454\t8.1\t11.8\n"
+        "United Arab Emirates\t210000\t230000\t32000\t7187\t3.9\t6.6\n"
+    )
+
+    records = TradeMapAdapter.parse_csv_export(sample_trademap_tsv, "sample_export.tsv", "0802.51")
+    assert len(records) == 3  # "World" excluded
+    destinations = [r.country_destination for r in records]
+    assert "Germany" in destinations
+    assert "China" in destinations
+    assert "United Arab Emirates" in destinations
+
+    ger_record = next(r for r in records if r.country_destination == "Germany")
+    assert ger_record.trade_value_usd == Decimal("490000000")  # 490,000 * 1000
+    assert ger_record.unit_value_usd == Decimal("8166")
+    assert ger_record.annual_growth_rate_pct == Decimal("5.2")
+    assert ger_record.market_share_pct == Decimal("14.2")
+
+
+def test_trade_sources_metadata_structure():
+    """Ensures that all 7 external trade sources return complete, non-undefined metadata."""
+    registry = TradeSourcesRegistry()
+    sources = registry.list_sources()
+
+    assert len(sources) == 7
+    for s in sources:
+        assert s["source_id"]
+        assert s["name"]
+        assert s["base_url"].startswith("http")
+        assert s["operational_status"] in ("ACTIVE_DIRECT", "PORTAL_SEARCH")
+        assert len(s["coverage_geography"]) > 0
+        assert len(s["coverage_frequency"]) > 0
+        assert len(s["notes"]) > 10
+        # None of these must ever be undefined/empty
+        assert "undefined" not in s["name"].lower()
+        assert "undefined" not in s["notes"].lower()

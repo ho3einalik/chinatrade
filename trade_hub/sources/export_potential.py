@@ -12,12 +12,14 @@ class ExportPotentialMapAdapter(SourceAdapter):
     source_id = "export_potential"
     source_name = "ITC Export Potential Map"
     base_url = "https://exportpotential.intracen.org"
-    coverage_countries = ["Global (220+ Countries)"]
-    coverage_products = "HS6 Products"
+    coverage_countries = ["جهانی (۲۲۰+ کشور و اقتصاد مقصد)"]
+    coverage_products = "کالاهای صادراتی HS شش رقمی"
+    coverage_frequency = "مدل‌های اقتصادسنجی و پتانسیل تجاری"
     requires_auth = False
     data_nature = "ECONOMETRIC_POTENTIAL_GAP"
     is_live_api = False
     last_verified_date = "2026-03-01"
+    notes = "تحلیل پتانسیل دست‌نخورده صادراتی (Untapped Potential): کشف شکاف بازار میان توان تامین ایران و تقاضای واقعی کشورها بر اساس مدل جاذبه تجاری."
 
     def build_search_url(
         self,

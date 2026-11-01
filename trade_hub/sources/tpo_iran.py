@@ -13,12 +13,14 @@ class TPOIranAdapter(SourceAdapter):
     source_id = "tpo_iran"
     source_name = "سازمان توسعه تجارت ایران (TPO)"
     base_url = "http://tpo.ir"
-    coverage_countries = ["Iran Trade Partners (EAEU, Iraq, UAE, Turkey, China, India, Oman, Pakistan)"]
-    coverage_products = "Iran Export Commodities & Preferential Tariffs"
+    coverage_countries = ["شرکای تجاری اصلی ایران (اوراسیا، عراق، امارات، ترکیه، چین، هند، عمان، پاکستان)"]
+    coverage_products = "کالاهای صادراتی ایران، فهرست‌های ترجیحی و تشویق‌های صادراتی"
+    coverage_frequency = "مقررات، بخشنامه‌ها و موافقت‌نامه‌های فعال"
     requires_auth = False
     data_nature = "OFFICIAL_CHAMBER_REGULATORY"
     is_live_api = False
     last_verified_date = "2026-03-01"
+    notes = "مرجع حاکمیتی صادرات غیرنفتی: موافقت‌نامه‌های تجارت آزاد و ترجیحی (اوراسیا، ترکیه، پاکستان)، اعزام هیئت‌های تجاری و استانداردهای مبدا."
 
     def build_search_url(
         self,

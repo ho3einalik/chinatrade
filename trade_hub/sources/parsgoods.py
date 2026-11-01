@@ -15,6 +15,8 @@ class ParsGoodsAdapter(SourceAdapter):
     base_url = "https://parsgoods.com/fa"
     coverage_countries = ["ایران", "کشورهای هدف صادراتی (خاورمیانه، CIS، اروپا، آفریقا)"]
     coverage_products = "کالاهای تولیدی ایران (پتروشیمی، کشاورزی، صنایع دستی، مواد ساختمانی)"
+    coverage_frequency = "پایگاه داده زنده شرکت‌ها و شوروم آنلاین"
+    notes = "بانک اطلاعات تامین‌کنندگان و صادرکنندگان معتبر ایرانی، کاتالوگ‌های چندزبانه صادراتی و ایجاد کانال معرفی محصولات به مشتریان خارجی."
     requires_auth = False
     data_nature = "B2B_EXPORTER_DIRECTORY"
     is_live_api = False

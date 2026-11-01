@@ -43,12 +43,22 @@ class SourceAdapter(ABC):
         """Parses legal user-uploaded CSV, TSV, or Excel export files into NormalizedTradeRecord."""
         pass
 
+    coverage_frequency: str = "سالانه و فصلی"
+    notes: str = ""
+
     def get_metadata(self) -> Dict[str, Any]:
         """Returns source specifications for display in UI and audit reports."""
+        geo = ", ".join(self.coverage_countries) if isinstance(self.coverage_countries, list) else str(self.coverage_countries)
+        status_label = "ACTIVE_DIRECT" if self.is_live_api else "PORTAL_SEARCH"
         return {
             "source_id": self.source_id,
+            "name": self.source_name,
             "source_name": self.source_name,
             "base_url": self.base_url,
+            "operational_status": status_label,
+            "coverage_geography": geo,
+            "coverage_frequency": getattr(self, "coverage_frequency", "آمار گمرکی سالانه و فصلی"),
+            "notes": getattr(self, "notes", self.data_nature),
             "coverage_countries": self.coverage_countries,
             "coverage_products": self.coverage_products,
             "requires_auth": self.requires_auth,

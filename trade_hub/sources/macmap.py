@@ -12,12 +12,14 @@ class MarketAccessMapAdapter(SourceAdapter):
     source_id = "macmap"
     source_name = "ITC Market Access Map (Tariffs & Trade Agreements)"
     base_url = "https://www.macmap.org"
-    coverage_countries = ["Global (200+ Countries)"]
-    coverage_products = "National Tariff Lines (HS6 to HS12)"
+    coverage_countries = ["جهانی (۲۰۰+ کشور و قلمرو)"]
+    coverage_products = "خطوط تعرفه ملی گمرکات (HS6 الی HS12)"
+    coverage_frequency = "بروزرسانی مداوم قوانین تعرفه و موافقت‌نامه‌ها"
     requires_auth = False
     data_nature = "REGULATORY_TARIFFS"
     is_live_api = False
     last_verified_date = "2026-03-01"
+    notes = "پایگاه جامع موانع تعرفه‌ای و غیرتعرفه‌ای: استعلام حقوق ورودی گمرکی، تعرفه‌های ترجیحی، سهمیه‌ها و مالیات‌های بازرگانی کشور مقصد."
 
     def build_search_url(
         self,

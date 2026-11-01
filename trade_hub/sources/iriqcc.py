@@ -14,6 +14,8 @@ class IRIQCCAdapter(SourceAdapter):
     base_url = "http://ir-iqcc.com"
     coverage_countries = ["ایران", "عراق (شامل اقلیم کردستان و بخش مرکزی/جنوبی)"]
     coverage_products = "صادرات مصالح ساختمانی، پتروشیمی، غذایی، بهداشتی و تجهیزات الکتریکی"
+    coverage_frequency = "روزانه و هفتگی (پایش پایانه‌های مرزی)"
+    notes = "پایش عملیاتی پایانه‌های مرزی فعال (مهران، شلمچه، پرویزخان، باشماق)، استانداردهای کالایی، الزامات برچسب‌گذاری عربی و عوارض ورود به عراق."
     requires_auth = False
     data_nature = "BORDER_LOGISTICS_REGULATORY"
     is_live_api = False

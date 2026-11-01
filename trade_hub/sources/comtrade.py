@@ -17,12 +17,14 @@ class UNComtradeAdapter(SourceAdapter):
     source_id = "comtrade"
     source_name = "UN Comtrade (United Nations Statistics Division)"
     base_url = "https://comtradeplus.un.org"
-    coverage_countries = ["Global (All UN Member States)"]
-    coverage_products = "HS 2-digit to 6-digit commodities"
+    coverage_countries = ["جهانی (تمامی ۱۹۳ کشور عضو سازمان ملل)"]
+    coverage_products = "کالاهای تجاری HS دو تا شش رقمی"
+    coverage_frequency = "سالانه و ماهانه (کوئری زنده API رسمی سازمان ملل)"
     requires_auth = False  # Public portal query is open; API v1 high-volume requires Primary Key
     data_nature = "HISTORICAL_OFFICIAL_CUSTOMS"
     is_live_api = True
     last_verified_date = "2026-03-01"
+    notes = "آمار رسمی تجارت کالایی ملل متحد (UNSD): جریان‌های دوجانبه مبادلات کشورها، ارزش دلاری، وزن خالص و استعلام زنده API."
 
     def build_search_url(
         self,
