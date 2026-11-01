@@ -427,8 +427,49 @@ class ReportGenerator:
 </html>"""
         return html
 
-    def save_reports(self, report: ImportOpportunityReport, filename_prefix: Optional[str] = None) -> tuple[str, str]:
-        """ذخیره گزارش در دو فرمت مارک‌داون و HTML با نام فایل امن"""
+    def generate_csv(self, report: ImportOpportunityReport) -> str:
+        """تولید خروجی جدولی CSV شامل مقایسه هزینه‌ها و تأمین‌کنندگان"""
+        import io
+        import csv
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Section 1: Summary
+        writer.writerow(["شاخص", "مقدار"])
+        writer.writerow(["نام فارسی کالا", report.product_name_fa])
+        writer.writerow(["نام انگلیسی کالا", report.product_name_en])
+        writer.writerow(["دسته‌بندی", report.category])
+        writer.writerow(["کد تعرفه HS", report.hs_code_estimate])
+        writer.writerow(["امتیاز فرصت تجاری", report.opportunity_score])
+        writer.writerow([])
+
+        # Section 2: Economics
+        writer.writerow(["شاخص مالی (تومان)", "حمل هوایی (Air)", "حمل دریایی (Sea)"])
+        air = report.air_cost_analysis
+        sea = report.sea_cost_analysis
+        if air and sea:
+            writer.writerow(["بهای خرید کارخانه (تومان)", air.purchase_price_toman, sea.purchase_price_toman])
+            writer.writerow(["کرایه حمل بین‌المللی", air.international_shipping_toman, sea.international_shipping_toman])
+            writer.writerow(["حقوق و سود بازرگانی", air.customs_duty_toman + air.commercial_benefit_toman, sea.customs_duty_toman + sea.commercial_benefit_toman])
+            writer.writerow(["مالیات بر ارزش افزوده (۱۰٪)", air.vat_toman, sea.vat_toman])
+            writer.writerow(["ترخیص و حمل داخلی", air.clearance_and_brokerage_toman + air.domestic_logistics_toman, sea.clearance_and_brokerage_toman + sea.domestic_logistics_toman])
+            writer.writerow(["بهای تمام‌شده هر واحد", air.total_landed_cost_toman, sea.total_landed_cost_toman])
+            writer.writerow(["قیمت فروش هدف در ایران", air.target_selling_price_toman, sea.target_selling_price_toman])
+            writer.writerow(["سود خالص هر واحد", air.net_profit_per_unit_toman, sea.net_profit_per_unit_toman])
+            writer.writerow(["حاشیه سود خالص (Margin %)", f"{air.profit_margin_percent}%", f"{sea.profit_margin_percent}%"])
+            writer.writerow(["بازده سرمایه (ROI %)", f"{air.roi_percent}%", f"{sea.roi_percent}%"])
+        writer.writerow([])
+
+        # Section 3: Suppliers
+        writer.writerow(["نام تأمین‌کننده", "پلتفرم", "قیمت (یوان)", "MOQ", "محل استقرار", "رتبه اعتبار"])
+        for s in report.suppliers_china:
+            writer.writerow([s.name, s.platform, s.unit_price_cny, s.moq, s.location, s.supplier_tier])
+
+        return output.getvalue()
+
+    def save_reports(self, report: ImportOpportunityReport, filename_prefix: Optional[str] = None) -> tuple[str, str, str]:
+        """ذخیره گزارش در سه فرمت مارک‌داون، HTML و CSV با نام فایل امن"""
         import time
         # ساخت نام فایل تمیز و ایمن برای سیستم‌عامل
         slug = "".join(c if (c.isalnum() and ord(c) < 128) else "_" for c in report.product_name_en)
@@ -438,9 +479,11 @@ class ReportGenerator:
         
         md_path = os.path.join(self.output_dir, f"{prefix}.md")
         html_path = os.path.join(self.output_dir, f"{prefix}.html")
+        csv_path = os.path.join(self.output_dir, f"{prefix}.csv")
 
         md_content = self.generate_markdown(report)
         html_content = self.generate_html(report)
+        csv_content = self.generate_csv(report)
 
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_content)
@@ -448,4 +491,7 @@ class ReportGenerator:
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
 
-        return md_path, html_path
+        with open(csv_path, "w", encoding="utf-8") as f:
+            f.write(csv_content)
+
+        return md_path, html_path, csv_path

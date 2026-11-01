@@ -20,4 +20,9 @@ Thumbs.db
 # Generated reports folder (keep folder clean)
 reports/*.html
 reports/*.md
+reports/*.csv
 !reports/.gitkeep
+
+# Database & testing caches
+*.db
+.pytest_cache/

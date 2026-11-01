@@ -9,7 +9,14 @@ from config import CONFIG, TradeConfig
 from core.models import ImportOpportunityReport, ChineseSupplier, IranMarketPrice
 from core.china_sourcing import ChinaSourcingEngine
 from core.iran_market import IranMarketEngine
-from core.calculator import ImportProfitCalculator
+from core.calculator import ImportProfitCalculator, ComprehensiveLandedCostResult
+from core.matching import ProductMatchingEngine, MatchExplanation
+from core.verification import SupplierVerificationEngine, SupplierAuditResult
+from core.regulations import ImportRegulationsEngine, RegulatoryAssessment
+from core.ranking import OpportunityRankingEngine, OpportunityScoreBreakdown
+from connectors.china_b2b import ChinaB2BConnector
+from core.db import Database
+from core.alerts import AlertEngine
 
 class ChinaIranImportAgent:
     def __init__(self, config: Optional[TradeConfig] = None):
@@ -17,6 +24,10 @@ class ChinaIranImportAgent:
         self.sourcing_engine = ChinaSourcingEngine()
         self.market_engine = IranMarketEngine()
         self.calculator = ImportProfitCalculator(self.config)
+        self.matching_engine = ProductMatchingEngine()
+        self.b2b_connector = ChinaB2BConnector()
+        self.db = Database()
+        self.alert_engine = AlertEngine(self.db)
 
     def analyze_product(
         self,
@@ -86,6 +97,205 @@ class ChinaIranImportAgent:
             opportunity_score=opp_score,
             recommendation_summary=summary
         )
+
+    def analyze_product_comprehensive(
+        self,
+        product_query: str,
+        category: Optional[str] = None,
+        custom_target_iran_price: Optional[float] = None,
+        batch_quantity: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        تحلیل ۳۶۰ درجه و تمام‌عیار با سناریوهای ۳گانه، امتیاز تطبیق، ارزیابی ریسک و ثبت در دیتابیس
+        """
+        # 1. Base legacy report
+        report = self.analyze_product(product_query, category, custom_target_iran_price, batch_quantity)
+        best_sup = report.best_supplier
+        cat = report.category
+        target_price = custom_target_iran_price or (report.iran_market.average_price_toman if report.iran_market else 1000000)
+
+        # 2. 3-Scenario Landed Cost Calculations (Air & Sea)
+        air_scenarios = None
+        sea_scenarios = None
+        if best_sup:
+            air_scenarios = self.calculator.calculate_landed_cost_scenarios(
+                supplier=best_sup,
+                target_iran_price_toman=target_price,
+                shipping_method="Air Cargo",
+                batch_quantity=batch_quantity or best_sup.moq
+            )
+            sea_scenarios = self.calculator.calculate_landed_cost_scenarios(
+                supplier=best_sup,
+                target_iran_price_toman=target_price,
+                shipping_method="Sea Freight",
+                batch_quantity=batch_quantity or max(best_sup.moq * 2, 500)
+            )
+
+        # 3. Product Matching Engine Evaluation
+        matching_res = None
+        if best_sup and report.iran_market:
+            matching_res = self.matching_engine.compare_products(
+                iran_title=report.iran_market.title_fa,
+                iran_specs_dict={},
+                china_title=best_sup.product_title,
+                china_specs_dict=best_sup.product_specs,
+                category=cat
+            )
+
+        # 4. Supplier Risk Audit
+        supplier_audit = None
+        if best_sup:
+            supplier_audit = SupplierVerificationEngine.audit_supplier(best_sup, category=cat)
+
+        # 5. Regulatory & HS Code Assessment
+        reg_assessment = ImportRegulationsEngine.analyze_compliance(product_query, category=cat)
+
+        # 6. Multi-Factor Opportunity & Data Confidence Decoupling
+        from core.matching import MatchClassification
+        match_cls = matching_res.classification if matching_res else MatchClassification.INSUFFICIENT_DATA
+        sample_count = len(report.iran_market.sample_products) if (report.iran_market and report.iran_market.sample_products) else (1 if report.iran_market else 0)
+        
+        best_roi = float(air_scenarios.realistic.roi_percent if air_scenarios else 0.0)
+        best_margin = float(air_scenarios.realistic.margin_percent if air_scenarios else 0.0)
+        if sea_scenarios and float(sea_scenarios.realistic.roi_percent) > best_roi:
+            best_roi = float(sea_scenarios.realistic.roi_percent)
+            best_margin = float(sea_scenarios.realistic.margin_percent)
+
+        opp_eval = OpportunityRankingEngine.evaluate(
+            net_margin_pct=best_margin,
+            roi_pct=best_roi,
+            sales_velocity_score=report.iran_market.sales_velocity_score if report.iran_market else 5,
+            active_sellers_count=report.iran_market.active_sellers_count if report.iran_market else 1,
+            supplier_years=best_sup.years_active if best_sup else 1,
+            supplier_has_certs=bool(best_sup.certifications) if best_sup else False,
+            has_radio_or_health_barrier=reg_assessment.is_radio_equipment or reg_assessment.is_medical_or_cosmetic,
+            is_live_iran_data=any(c.is_live for c in (report.iran_market.channels if report.iran_market else [])),
+            match_classification=match_cls,
+            iran_sample_count=sample_count
+        )
+
+        # 7. Chinese B2B Search Links
+        chinese_kw = self.sourcing_engine.translate_to_chinese_keywords(product_query)
+        b2b_links = self.b2b_connector.generate_search_links(chinese_kw)
+
+        # Helper serializer for scenarios
+        def serialize_scenario_res(scen_obj: Optional[ComprehensiveLandedCostResult]):
+            if not scen_obj:
+                return None
+            def scen_dict(s):
+                return {
+                    "scenario_type": s.scenario_type,
+                    "title_fa": s.scenario_title_fa,
+                    "usd_rate": int(s.exchange_rate_usd_toman),
+                    "rmb_rate": int(s.exchange_rate_rmb_toman),
+                    "target_selling_price_toman": int(s.target_selling_price_toman),
+                    "landed_cost_unit_toman": int(s.landed_cost_unit_toman),
+                    "net_profit_unit_toman": int(s.net_profit_unit_toman),
+                    "margin_percent": float(s.margin_percent),
+                    "markup_percent": float(s.markup_percent),
+                    "roi_percent": float(s.roi_percent),
+                    "break_even_price_toman": int(s.break_even_price_toman),
+                    "break_even_units": s.break_even_units,
+                    "total_investment_toman": int(s.total_investment_toman),
+                    "total_net_profit_toman": int(s.total_net_profit_toman),
+                    "line_items": [
+                        {
+                            "category": item.category,
+                            "name_fa": item.name_fa,
+                            "amount_toman": int(item.amount_toman),
+                            "percentage": float(item.percentage_of_total)
+                        } for item in s.line_items
+                    ]
+                }
+            return {
+                "rule_version": scen_obj.rule_version,
+                "rule_date": scen_obj.rule_date,
+                "batch_quantity": scen_obj.batch_quantity,
+                "shipping_method": scen_obj.shipping_method,
+                "chargeable_weight_kg": float(scen_obj.chargeable_weight_kg),
+                "volume_cbm": float(scen_obj.volume_cbm),
+                "realistic": scen_dict(scen_obj.realistic),
+                "optimistic": scen_dict(scen_obj.optimistic),
+                "pessimistic": scen_dict(scen_obj.pessimistic),
+                "fx_sensitivity_10pct_impact_toman": int(scen_obj.fx_sensitivity_10pct_impact_toman),
+                "freight_sensitivity_20pct_impact_toman": int(scen_obj.freight_sensitivity_20pct_impact_toman)
+            }
+
+        # 8. Assemble full structured result
+        full_result = {
+            "query": product_query,
+            "category": cat,
+            "report": report.model_dump(),
+            "chinese_keyword": chinese_kw,
+            "b2b_platforms": b2b_links,
+            "air_scenarios": serialize_scenario_res(air_scenarios),
+            "sea_scenarios": serialize_scenario_res(sea_scenarios),
+            "matching": {
+                "score": matching_res.score if matching_res else 50.0,
+                "classification": matching_res.classification.value if matching_res else "INSUFFICIENT_DATA",
+                "pros": matching_res.pros if matching_res else [],
+                "cons": matching_res.cons if matching_res else [],
+                "missing_attributes": matching_res.missing_critical_attributes if matching_res else [],
+                "is_conditional": matching_res.is_conditional if matching_res else True
+            } if matching_res else None,
+            "supplier_audit": {
+                "name": supplier_audit.supplier_name if supplier_audit else "",
+                "risk_level": supplier_audit.risk_level if supplier_audit else "MEDIUM",
+                "risk_level_fa": supplier_audit.risk_level_fa if supplier_audit else "",
+                "safety_score": supplier_audit.safety_score if supplier_audit else 6.0,
+                "is_factory": supplier_audit.is_factory if supplier_audit else True,
+                "red_flags": supplier_audit.red_flags if supplier_audit else [],
+                "positive_signals": supplier_audit.positive_signals if supplier_audit else [],
+                "recommendations": supplier_audit.actionable_recommendations if supplier_audit else []
+            } if supplier_audit else None,
+            "regulations": {
+                "primary_hs_code": reg_assessment.primary_hs_code,
+                "candidate_hs_codes": [
+                    {
+                        "code": c.code,
+                        "description_fa": c.description_fa,
+                        "tariff_pct": c.base_tariff_pct,
+                        "benefit_pct": c.commercial_benefit_pct,
+                        "vat_pct": c.vat_pct,
+                        "priority_group": c.priority_group
+                    } for c in reg_assessment.candidate_hs_codes
+                ],
+                "mandatory_licenses": reg_assessment.mandatory_licenses,
+                "is_radio_equipment": reg_assessment.is_radio_equipment,
+                "is_medical_or_cosmetic": reg_assessment.is_medical_or_cosmetic,
+                "estimated_fx_queue_days": reg_assessment.estimated_fx_queue_days,
+                "warnings": reg_assessment.regulatory_warnings,
+                "steps": reg_assessment.compliance_steps
+            },
+            "opportunity_evaluation": {
+                "opportunity_score": opp_eval.opportunity_score,
+                "data_confidence_score": opp_eval.data_confidence_score,
+                "profitability_score": opp_eval.profitability_score,
+                "demand_velocity_score": opp_eval.demand_velocity_score,
+                "competition_score": opp_eval.competition_score,
+                "supplier_reliability_score": opp_eval.supplier_reliability_score,
+                "regulatory_risk_score": opp_eval.regulatory_risk_score,
+                "verdict": opp_eval.recommendation_verdict,
+                "risks": opp_eval.risk_summary,
+                "positives": opp_eval.positive_drivers
+            }
+        }
+
+        # 9. Persistence & Snapshots
+        snapshot_id = self.db.save_search_and_snapshot(
+            query=product_query,
+            category=cat,
+            report_dict=full_result,
+            rule_version=air_scenarios.rule_version if air_scenarios else "IR-CUSTOMS-1403"
+        )
+        full_result["snapshot_id"] = snapshot_id
+
+        # 10. Check triggered alerts
+        current_net_profit = float(air_scenarios.realistic.net_profit_unit_toman if air_scenarios else 0.0)
+        triggered = self.alert_engine.check_alerts(product_query, current_net_profit)
+        full_result["triggered_alerts"] = triggered
+
+        return full_result
 
     def find_opportunities(
         self,
