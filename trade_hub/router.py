@@ -36,6 +36,7 @@ from trade_hub.intelligence.journey_seller import SellerJourneyEngine
 from trade_hub.intelligence.journey_buyer import BuyerJourneyEngine
 from trade_hub.intelligence.journey_discovery import DiscoveryJourneyEngine
 from trade_hub.intelligence.company_verification import CompanyVerificationEngine
+from trade_hub.intelligence.live_buyer_crawler import LiveBuyerCrawler
 
 trade_hub_router = APIRouter()
 
@@ -186,6 +187,25 @@ def execute_seller_journey(payload: Dict[str, Any], tenant_id: str = "default_im
         batch_quantity=qty,
         unit_name=unit_name,
         tenant_id=tenant_id
+    )
+
+
+@trade_hub_router.post("/live-buyer-search", summary="Search verified buyers and directories online")
+def search_live_buyers_endpoint(payload: Dict[str, Any]):
+    """
+    Queries live directories (ITC Trade Map, ParsGoods, TPO, ICCIMA, IME) and returns
+    verified buyer profiles with direct phone numbers, full addresses, websites, and emails.
+    """
+    product_query = payload.get("product_query") or payload.get("product_name")
+    if not product_query:
+        raise HTTPException(status_code=400, detail="product_query is required")
+    target_country = payload.get("target_country", "Iran")
+    hs_code = payload.get("hs_code")
+
+    return LiveBuyerCrawler.search_verified_buyers(
+        product_query=product_query,
+        target_country=target_country,
+        hs_code=hs_code
     )
 
 

@@ -114,3 +114,33 @@ def test_api_seller_journey_domestic_endpoint():
     assert len(dom_summary["consuming_industries"]) >= 3
     assert len(data["domestic_buyers"]) >= 5
     assert any("پارس" in b["entity_name"] for b in data["domestic_buyers"])
+    # Check that contact details and addresses are present
+    pars = next(b for b in data["domestic_buyers"] if "پارس" in b["entity_name"])
+    assert pars.get("address") is not None
+    assert pars.get("phone") is not None
+    assert "parsfeedco.com" in (pars.get("website") or "")
+
+
+def test_api_live_buyer_search():
+    payload = {
+        "product_query": "3000 تن جو دامی",
+        "target_country": "Iran"
+    }
+    response = client.post("/api/trade-hub/live-buyer-search", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "directory_sources" in data
+    assert len(data["directory_sources"]) >= 5
+    assert any("trademap" in s["url"].lower() for s in data["directory_sources"])
+    assert any("parsgoods" in s["url"].lower() for s in data["directory_sources"])
+    assert any("tpo" in s["url"].lower() for s in data["directory_sources"])
+
+    assert "buyers" in data
+    assert data["total_buyers_count"] >= 10
+    # Check enriched copyable dossier
+    b0 = data["buyers"][0]
+    assert "copyable_dossier" in b0
+    assert "آدرس:" in b0["copyable_dossier"]
+    assert "تلفن" in b0["copyable_dossier"]
+

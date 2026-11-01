@@ -299,6 +299,13 @@ class EntityMatchResult(BaseModel):
     city_province: Optional[str] = None
     payment_terms_expected: Optional[str] = None
     contact_channel: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    email: Optional[str] = None
+    directory_source: Optional[str] = None
+    directory_url: Optional[str] = None
+    quality_requirement: Optional[str] = None
 
 
 # --------------------------------------------------------------------------

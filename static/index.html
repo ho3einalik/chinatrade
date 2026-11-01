@@ -2253,10 +2253,14 @@
                     linksContainer.innerHTML = '';
                     const cleanHs = (d.hs_code_primary || '').replace(/\./g, '');
                     const destCode = (dest || 'IRN').substring(0, 3).toUpperCase();
+                    const prodName = encodeURIComponent(p || '');
                     
                     const directSources = [
-                        { title: 'تحلیل تقاضا در ITC Trade Map', url: `https://www.trademap.org/Country_SelProduct.aspx?nvpm=1|||||${cleanHs}|||2|1|1|1|1||2|1|1`, badge: 'Trade Map', bg: 'bg-blue-100 text-blue-800' },
-                        { title: 'دایرکتوری خریداران ITC', url: `https://www.trademap.org/Companies.aspx?nvpm=1|||||${cleanHs}|||2|1|1|1|1||2|1|1`, badge: 'شرکت‌های واردکننده', bg: 'bg-emerald-100 text-emerald-800' },
+                        { title: 'دایرکتوری شرکت‌های واردکننده ITC', url: `https://www.trademap.org/Companies.aspx?nvpm=1|||||${cleanHs}|||2|1|1|1|1||2|1|1`, badge: 'Trade Map', bg: 'bg-blue-100 text-blue-800' },
+                        { title: 'دایرکتوری خریداران ParsGoods', url: `https://parsgoods.com/fa/search?q=${prodName}`, badge: 'ParsGoods', bg: 'bg-emerald-100 text-emerald-800' },
+                        { title: 'بانک فعالان اقتصادی TPO', url: `http://tpo.ir`, badge: 'سازمان توسعه تجارت', bg: 'bg-sky-100 text-sky-800' },
+                        { title: 'اتاق بازرگانی ایران و عراق', url: `http://ir-iqcc.com/members-directory`, badge: 'IR-IQCC', bg: 'bg-purple-100 text-purple-800' },
+                        { title: 'تالار فیزیکی بورس کالای ایران', url: `https://www.ime.co.ir/live-markets`, badge: 'بورس کالا IME', bg: 'bg-emerald-100 text-emerald-800' },
                         { title: 'جریان‌های تجاری UN Comtrade', url: `https://comtradeplus.un.org/TradeFlow?Frequency=A&Flows=M&CommodityCodes=${cleanHs}`, badge: 'Comtrade', bg: 'bg-sky-100 text-sky-800' },
                         { title: 'تعرفه گمرکی در MacMap', url: `https://www.macmap.org/en/customs-duties/results?reporter=${destCode}&partner=IRN&product=${cleanHs}`, badge: 'تعرفه‌ها', bg: 'bg-amber-100 text-amber-800' }
                     ];
@@ -2307,13 +2311,15 @@
                         
                         if (b.buyer_type || b.city_province) {
                             // Rich Iranian Domestic Buyer Card
-                            row.className = 'p-3 bg-white rounded-2xl border border-slate-200 hover:border-emerald-400 hover:shadow-xs transition-all text-xs shadow-2xs space-y-2';
+                            const safeJson = encodeURIComponent(JSON.stringify(b));
+                            row.className = 'p-4 bg-white rounded-2xl border border-slate-200 hover:border-emerald-500 hover:shadow-xs transition-all text-xs shadow-2xs space-y-2.5';
                             row.innerHTML = `
                                 <div class="flex justify-between items-start gap-2">
                                     <div>
-                                        <div class="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                                        <div class="font-black text-slate-900 text-sm flex flex-wrap items-center gap-1.5">
                                             <span>${b.entity_name}</span>
                                             <span class="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">خریدار مستقیم ایران</span>
+                                            ${b.directory_source ? `<span class="text-[9px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-bold border border-blue-100">منبع: ${b.directory_source}</span>` : ''}
                                         </div>
                                         <div class="text-[11px] text-slate-600 font-semibold mt-0.5">${b.buyer_type || ''}</div>
                                     </div>
@@ -2323,18 +2329,48 @@
                                 </div>
                                 
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-1.5 text-[11px] bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                    <div><strong class="text-slate-500">📍 موقعیت و انبار:</strong> <span class="font-bold text-slate-800">${b.city_province || 'سراسری'}</span></div>
-                                    <div><strong class="text-slate-500">📦 ظرفیت خرید:</strong> <span class="font-bold text-slate-800">${b.purchasing_capacity || 'متناسب با سفارش'}</span></div>
-                                    <div><strong class="text-slate-500">💳 روش تسویه:</strong> <span class="font-bold text-slate-800">${b.payment_terms_expected || 'نقدی / اعتباری'}</span></div>
-                                    <div><strong class="text-slate-500">📞 واحد تماس:</strong> <span class="font-bold text-blue-700 font-mono">${b.contact_channel || 'دبیرخانه بازرگانی'}</span></div>
+                                    <div class="md:col-span-2">
+                                        <strong class="text-slate-500">📍 آدرس دقیق کارخانه / انبار:</strong>
+                                        <span class="font-bold text-slate-800 mr-1">${b.address || ('استان ' + (b.city_province || 'تهران') + '، انبار مرکزی کارخانه')}</span>
+                                    </div>
+                                    <div>
+                                        <strong class="text-slate-500">📞 شماره تماس و فکس:</strong>
+                                        <span class="font-bold text-blue-700 font-mono mr-1" dir="ltr">${b.phone || b.contact_channel || 'واحد خرید و تدارکات'}</span>
+                                    </div>
+                                    <div>
+                                        <strong class="text-slate-500">🌐 وب‌سایت رسمی:</strong>
+                                        ${b.website ? `<a href="${b.website}" target="_blank" class="font-bold text-emerald-700 underline font-mono mr-1">${b.website.replace('https://', '').replace('http://', '')}</a>` : '<span class="text-slate-400">ثبت در سامانه صنف</span>'}
+                                    </div>
+                                    <div>
+                                        <strong class="text-slate-500">✉️ ایمیل بازرگانی:</strong>
+                                        ${b.email ? `<a href="mailto:${b.email}" class="font-bold text-indigo-700 font-mono mr-1">${b.email}</a>` : '<span class="text-slate-400">ارسال پیش‌فاکتور رسمی</span>'}
+                                    </div>
+                                    <div>
+                                        <strong class="text-slate-500">📦 ظرفیت خرید ماهانه:</strong>
+                                        <span class="font-black text-slate-900 mr-1">${b.purchasing_capacity || 'متناسب با سفارش'}</span>
+                                    </div>
+                                    <div>
+                                        <strong class="text-slate-500">💳 روش تسویه:</strong>
+                                        <span class="font-bold text-amber-900 mr-1">${b.payment_terms_expected || 'نقدی / بازارگاه'}</span>
+                                    </div>
+                                    <div>
+                                        <strong class="text-slate-500">📍 موقعیت استانی:</strong>
+                                        <span class="font-bold text-slate-800 mr-1">${b.city_province || 'سراسری'}</span>
+                                    </div>
                                 </div>
 
-                                <div class="flex items-center justify-between pt-1 border-t border-slate-100 gap-2">
+                                <div class="flex flex-wrap items-center justify-between pt-1.5 border-t border-slate-100 gap-2">
                                     <span class="text-[10px] text-slate-500 truncate">💡 اقدام پیشنهادی: ${b.recommended_action}</span>
-                                    <button onclick="quickAddContactFromBuyer('${b.entity_name}', '${b.city_province || 'Iran'}')" class="px-2.5 py-1 bg-matte hover:bg-black text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 shrink-0">
-                                        <i data-lucide="user-plus" class="w-3 h-3"></i>
-                                        <span>ثبت در مخاطبان CRM</span>
-                                    </button>
+                                    <div class="flex items-center gap-1.5">
+                                        <button onclick="copyBuyerDossier('${safeJson}')" class="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1">
+                                            <i data-lucide="copy" class="w-3 h-3"></i>
+                                            <span>کپی آدرس و تماس</span>
+                                        </button>
+                                        <button onclick="quickAddContactFromBuyer('${b.entity_name}', '${b.city_province || 'Iran'}')" class="px-2.5 py-1 bg-matte hover:bg-black text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-1">
+                                            <i data-lucide="user-plus" class="w-3 h-3"></i>
+                                            <span>ثبت در CRM</span>
+                                        </button>
+                                    </div>
                                 </div>
                             `;
                         } else {
@@ -2416,6 +2452,26 @@
                 }
             } catch (e) {
                 alert('خطا در ارتباط با سرور.');
+            }
+        }
+
+        function copyBuyerDossier(encodedJson) {
+            try {
+                const b = JSON.parse(decodeURIComponent(encodedJson));
+                const text = `🏢 نام شرکت / خریدار: ${b.entity_name}\n` +
+                    `🏷️ زمینه فعالیت: ${b.buyer_type || ''}\n` +
+                    `📍 آدرس دقیق کارخانه و دفتر: ${b.address || ('استان ' + (b.city_province || 'تهران'))}\n` +
+                    `📞 شماره‌های تماس و فکس: ${b.phone || b.contact_channel || ''}\n` +
+                    (b.website ? `🌐 وب‌سایت رسمی: ${b.website}\n` : '') +
+                    (b.email ? `✉️ ایمیل واحد بازرگانی: ${b.email}\n` : '') +
+                    `📦 ظرفیت خرید ماهانه: ${b.purchasing_capacity || 'متناسب با سفارش'}\n` +
+                    `💳 شرایط تسویه حساب: ${b.payment_terms_expected || 'نقدی / بازارگاه'}\n` +
+                    `🔍 منبع دایرکتوری: ${b.directory_source || 'پورتال ParsGoods و سندیکای صنایع'}\n` +
+                    `💡 اقدام پیشنهادی جهت فروش: ${b.recommended_action || ''}`;
+                navigator.clipboard.writeText(text);
+                alert(`شناسنامه کامل تماس و آدرس کارخانه «${b.entity_name}» در کلیپ‌بورد کپی شد.`);
+            } catch (e) {
+                alert('خطا در کپی مشخصات خریدار');
             }
         }
 
