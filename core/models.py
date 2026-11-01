@@ -34,6 +34,37 @@ class VerificationStatus(str, Enum):
     UNVERIFIED = "unverified"                 # تأییدنشده (صرفاً پروفایل عمومی)
     INCOMPLETE = "incomplete"                 # اطلاعات ناقص
     WARNING = "warning"                       # دارای پرچم قرمز و هشدار ریسک
+    MANUAL_OVERRIDE = "manual_override"       # واردشده دستی توسط کاربر
+
+class ComponentStatus(str, Enum):
+    REAL_VERIFIED = "REAL_VERIFIED"     # استعلام زنده یا پیش‌فاکتور واقعی
+    USER_MANUAL = "USER_MANUAL"         # قیمت واردشده توسط کاربر
+    ESTIMATED = "ESTIMATED"             # تخمینی بر اساس الگوها و مراجع صنعتی
+    UNAVAILABLE = "UNAVAILABLE"         # ناموجود
+
+class DataProvenanceBreakdown(BaseModel):
+    supplier_price_status: str = Field(default="UNAVAILABLE", description="وضعیت قیمت تأمین‌کننده: REAL_VERIFIED, USER_MANUAL, ESTIMATED, UNAVAILABLE")
+    supplier_price_source: str = Field(default="نامشخص", description="منبع قیمت تأمین‌کننده")
+    supplier_price_value: Optional[float] = None
+    supplier_currency: str = "CNY"
+    
+    iran_market_status: str = Field(default="UNAVAILABLE", description="وضعیت قیمت بازار ایران: REAL_VERIFIED, USER_MANUAL, ESTIMATED, UNAVAILABLE")
+    iran_market_source: str = Field(default="نامشخص", description="منبع قیمت بازار ایران")
+    iran_market_value_toman: Optional[float] = None
+    iran_sellers_count: int = 0
+    
+    shipping_cost_status: str = Field(default="ESTIMATED", description="وضعیت کرایه حمل: ESTIMATED, REAL_VERIFIED")
+    shipping_cost_source: str = Field(default="نرخ‌نامه مرجع لجستیک هوایی و کانتینری", description="منبع محاسبه کرایه حمل")
+    
+    customs_tariff_status: str = Field(default="REAL_VERIFIED", description="وضعیت تعرفه گمرکی: REAL_VERIFIED")
+    customs_tariff_source: str = Field(default="کتاب مقررات صادرات و واردات سال جاری", description="منبع تعرفه و ضوابط ورود")
+    hs_code: str = Field(default="نامشخص", description="کد تعرفه HS")
+    
+    last_updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="زمان آخرین به‌روزرسانی")
+    
+    is_definite_profit_ready: bool = Field(default=False, description="آیا داده‌های قطعی برای سود قرارداد آماده است")
+    missing_for_definite: List[str] = Field(default_factory=list, description="اقلام کمبود برای محاسبه سود قطعی")
+    calculation_mode: str = Field(default="SCENARIO_SIMULATION", description="حالت محاسبه: DEFINITE_CONTRACT, SCENARIO_SIMULATION, DISCOVERY_ONLY")
 
 class PriceTier(BaseModel):
     min_quantity: int = Field(..., description="حداقل تعداد برای این پله قیمتی")
@@ -134,3 +165,7 @@ class ImportOpportunityReport(BaseModel):
     opportunity_score: float = Field(default=5.0, description="امتیاز جذابیت فرصت تجاری از 10")
     recommendation_summary: str = Field(default="", description="خلاصه توصیه بازرگانی و استراتژی ورود")
     insufficient_data: bool = Field(default=False, description="آیا داده‌های واقعی برای تحلیل کامل ناکافی است")
+    data_provenance: Optional[DataProvenanceBreakdown] = Field(default=None, description="شناسنامه تفکیک‌شده اصالت و وضعیت مؤلفه‌های داده")
+    is_simulation: bool = Field(default=False, description="آیا محاسبات سناریوی شبیه‌سازی است")
+    definite_profit_calculable: bool = Field(default=False, description="آیا سود قطعی قرارداد قابل محاسبه است")
+    missing_requirements: List[str] = Field(default_factory=list, description="موارد لازم جهت محاسبه سود قطعی")

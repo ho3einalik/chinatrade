@@ -118,6 +118,9 @@ class AnalyzeRequest(BaseModel):
     quantity: Optional[int] = None
     category: Optional[str] = None
     allow_demo: Optional[bool] = False
+    custom_buy_price_cny: Optional[float] = None
+    custom_buy_price_usd: Optional[float] = None
+    include_indicative_benchmark: Optional[bool] = True
 
 class ManualQuoteRequest(BaseModel):
     supplier_name: str
@@ -158,12 +161,18 @@ async def analyze_endpoint(req: AnalyzeRequest):
     if not validate_safe_target(clean_product):
         raise HTTPException(status_code=400, detail="ورودی نامعتبر یا آدرس شبکه داخلی/لوپ‌بک (SSRF Forbidden) شناسایی شد.")
 
+    buy_cny = req.custom_buy_price_cny
+    if not buy_cny and req.custom_buy_price_usd and req.custom_buy_price_usd > 0:
+        buy_cny = float(req.custom_buy_price_usd * 7.2)  # USD to CNY parity
+
     result = agent.analyze_product_comprehensive(
         product_query=clean_product,
         category=req.category,
         custom_target_iran_price=req.target_price,
         batch_quantity=req.quantity,
-        allow_demo=bool(req.allow_demo)
+        allow_demo=bool(req.allow_demo),
+        custom_buy_price_cny=buy_cny,
+        include_indicative_benchmark=True if req.include_indicative_benchmark is None else bool(req.include_indicative_benchmark)
     )
     return result
 

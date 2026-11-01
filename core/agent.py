@@ -6,7 +6,15 @@ regulatory risk assessment, and executive opportunity discovery.
 
 from typing import List, Optional, Dict, Any
 from config import CONFIG, TradeConfig
-from core.models import ImportOpportunityReport, ChineseSupplier, IranMarketPrice
+from core.models import (
+    ImportOpportunityReport,
+    ChineseSupplier,
+    IranMarketPrice,
+    DataProvenanceBreakdown,
+    ComponentStatus,
+    DataType,
+    VerificationStatus
+)
 from core.china_sourcing import ChinaSourcingEngine
 from core.iran_market import IranMarketEngine
 from core.calculator import ImportProfitCalculator, ComprehensiveLandedCostResult
@@ -35,7 +43,9 @@ class ChinaIranImportAgent:
         category: Optional[str] = None,
         custom_target_iran_price: Optional[float] = None,
         batch_quantity: Optional[int] = None,
-        allow_demo: bool = False
+        allow_demo: bool = False,
+        custom_buy_price_cny: Optional[float] = None,
+        include_indicative_benchmark: bool = True
     ) -> ImportOpportunityReport:
         """
         تحلیل جامع ۳۶۰ درجه یک کالا:
@@ -43,24 +53,75 @@ class ChinaIranImportAgent:
         ۲. استخراج قیمت‌های رقبا در بازار ایران (ترب، دیجی‌کالا، بازار آزاد)
         ۳. محاسبه بهای تمام‌شده گمرکی، هوایی، دریایی و سود خالص
         ۴. تعیین HS Code و مجوزهای الزامی گمرک
-        ۵. ارزیابی ریسک و امتیاز فرصت تجاری
+        ۵. ارزیابی ریسک و شناسنامه تفکیک‌شده داده‌ها
         """
-        # ۱. استخراج تامین‌کنندگان چین (صرفاً داده‌های واقعی یا پیش‌فاکتورهای ثبت‌شده)
-        suppliers = self.sourcing_engine.search_suppliers(product_query, category, allow_demo=allow_demo)
+        # ۱. استخراج تامین‌کنندگان چین (پیش‌فاکتور قطعی، ورودی دستی کاربر، یا نرخ مرجع صنعتی)
+        suppliers = self.sourcing_engine.search_suppliers(
+            product_query,
+            category,
+            allow_demo=allow_demo,
+            custom_buy_price_cny=custom_buy_price_cny,
+            include_indicative_benchmark=include_indicative_benchmark
+        )
         best_supplier = suppliers[0] if suppliers else None
 
-        # ۲. استخراج قیمت در بازار ایران (استعلام زنده یا قیمت دستی)
+        # ۲. استخراج قیمت در بازار ایران (استعلام زنده دیجی‌کالا یا قیمت دستی)
         iran_market = self.market_engine.analyze_iran_market(product_query, custom_target_iran_price)
 
         # تعیین قیمت فروش هدف (در صورت عدم دسترسی: None)
         target_sell_price = custom_target_iran_price or (iran_market.average_price_toman if iran_market else None)
 
-        # ۳. محاسبات دقیق مالی (هوایی و دریایی)
+        # ۳. تخمین کد تعرفه گمرکی (HS Code) و الزامات رگولاتوری
+        hs_code, regulations, detected_category = self._determine_customs_and_regulations(product_query)
+
+        # ۴. شناسنامه تفکیک‌شده وضعیت مؤلفه‌های داده (Data Provenance Breakdown)
+        missing_reqs: List[str] = []
+        
+        # الف) وضعیت قیمت تأمین‌کننده چین
+        if best_supplier:
+            if best_supplier.data_type in (DataType.MANUAL_QUOTE, DataType.CSV_IMPORT) and best_supplier.verification_status != VerificationStatus.MANUAL_OVERRIDE:
+                supp_status = ComponentStatus.REAL_VERIFIED
+                supp_source = f"پیش‌فاکتور رسمی ثبت‌شده ({best_supplier.name} - {best_supplier.platform})"
+            elif best_supplier.verification_status == VerificationStatus.MANUAL_OVERRIDE:
+                supp_status = ComponentStatus.USER_MANUAL
+                supp_source = "قیمت ورودی مستقیم کاربر در استعلام"
+            elif best_supplier.data_type == DataType.ESTIMATE:
+                supp_status = ComponentStatus.ESTIMATED
+                supp_source = "نرخ مرجع صنعتی کاتالوگ چین (شبیه‌سازی سناریو)"
+                missing_reqs.append("پیش‌فاکتور قطعی کارخانه چین ثبت نشده است (محاسبه بر مبنای نرخ مرجع صنعتی انجام شد).")
+            else:
+                supp_status = ComponentStatus.ESTIMATED
+                supp_source = "داده نمونه آموزشی (Demo)"
+        else:
+            supp_status = ComponentStatus.UNAVAILABLE
+            supp_source = "قیمت خرید چین ناموجود"
+            missing_reqs.append("هیچ قیمتی برای خرید از چین یافت نشد. قیمت را از لینک‌های زنده استعلام کرده و در ماشین‌حساب وارد کنید.")
+
+        # ب) وضعیت قیمت بازار ایران
+        if custom_target_iran_price and custom_target_iran_price > 0:
+            market_status = ComponentStatus.USER_MANUAL
+            market_source = "قیمت هدف واردشده توسط کاربر"
+        elif iran_market and iran_market.status == "available" and iran_market.average_price_toman:
+            market_status = ComponentStatus.REAL_VERIFIED
+            market_source = f"استعلام زنده API دیجی‌کالا ({iran_market.active_sellers_count} کالا)"
+        else:
+            market_status = ComponentStatus.UNAVAILABLE
+            market_source = "استعلام زنده نتیجه‌ای نداشت"
+            missing_reqs.append("قیمت فروش کالا در بازار ایران ناموجود است. قیمت فروش هدف را وارد کنید.")
+
+        # تشخیص امکان سود قطعی در برابر شبیه‌سازی سناریو
+        is_definite = (supp_status in (ComponentStatus.REAL_VERIFIED, ComponentStatus.USER_MANUAL)) and \
+                      (market_status in (ComponentStatus.REAL_VERIFIED, ComponentStatus.USER_MANUAL))
+        is_simulation = not is_definite
+
+        # ۵. محاسبات دقیق مالی (هوایی و دریایی)
         air_analysis = None
         sea_analysis = None
         is_insufficient = False
 
         if best_supplier and target_sell_price and target_sell_price > 0:
+            calc_mode = "DEFINITE_CONTRACT" if is_definite else "SCENARIO_SIMULATION"
+            is_insufficient = False
             air_analysis = self.calculator.calculate_landed_cost(
                 supplier=best_supplier,
                 target_iran_price_toman=target_sell_price,
@@ -74,20 +135,39 @@ class ChinaIranImportAgent:
                 batch_quantity=batch_quantity or max(best_supplier.moq * 2, 500)
             )
         else:
+            calc_mode = "DISCOVERY_ONLY"
             is_insufficient = True
 
-        # ۴. تخمین کد تعرفه گمرکی (HS Code) و الزامات رگولاتوری
-        hs_code, regulations, detected_category = self._determine_customs_and_regulations(product_query)
+        data_prov = DataProvenanceBreakdown(
+            supplier_price_status=supp_status.value,
+            supplier_price_source=supp_source,
+            supplier_price_value=best_supplier.unit_price_cny if best_supplier else None,
+            supplier_currency="CNY",
+            iran_market_status=market_status.value,
+            iran_market_source=market_source,
+            iran_market_value_toman=target_sell_price,
+            iran_sellers_count=iran_market.active_sellers_count if iran_market else 0,
+            shipping_cost_status="ESTIMATED",
+            shipping_cost_source="نرخ‌نامه مرجع لجستیک هوایی (IATA) و کانتینری (CBM)",
+            customs_tariff_status="REAL_VERIFIED",
+            customs_tariff_source="کتاب رسمی مقررات صادرات و واردات سال جاری",
+            hs_code=hs_code,
+            is_definite_profit_ready=is_definite,
+            missing_for_definite=missing_reqs,
+            calculation_mode=calc_mode
+        )
 
-        # ۵. محاسبه امتیاز جذابیت فرصت (Opportunity Score) از ۱۰
+        # ۶. محاسبه امتیاز جذابیت فرصت و توصیه بازرگانی
         if not is_insufficient:
             opp_score = self._calculate_opportunity_score(air_analysis, sea_analysis, iran_market)
             summary = self._generate_recommendation_summary(
                 product_query, best_supplier, air_analysis, sea_analysis, iran_market, opp_score
             )
+            if is_simulation:
+                summary += " [توجه: این سناریو بر اساس نرخ مرجع صنعتی چین شبیه‌سازی شده و پیش‌فاکتور قطعی کارخانه نیست]."
         else:
             opp_score = 1.0
-            summary = "داده‌های واقعی تأمین‌کننده چین یا قیمت بازار ایران برای این کالا ناکافی است. هیچ قیمت یا سود ساختگی تولید نشد. لطفاً از طریق تب پیش‌فاکتور/CSV اطلاعات کالا را وارد کنید یا از لینک‌های مستقیم استعلام بگیرید."
+            summary = "مشخصات فنی، کد تعرفه گمرکی و لینک‌های تأمین‌کنندگان شناسایی شدند. به دلیل نبود هم‌زمان قیمت خرید و فروش، محاسبه سود به ورود قیمت در ماشین‌حساب سناریو موکول شد."
 
         return ImportOpportunityReport(
             product_name_fa=product_query,
@@ -102,7 +182,11 @@ class ChinaIranImportAgent:
             sea_cost_analysis=sea_analysis,
             opportunity_score=opp_score,
             recommendation_summary=summary,
-            insufficient_data=is_insufficient
+            insufficient_data=is_insufficient,
+            data_provenance=data_prov,
+            is_simulation=is_simulation,
+            definite_profit_calculable=is_definite,
+            missing_requirements=missing_reqs
         )
 
     def analyze_product_comprehensive(
@@ -111,13 +195,23 @@ class ChinaIranImportAgent:
         category: Optional[str] = None,
         custom_target_iran_price: Optional[float] = None,
         batch_quantity: Optional[int] = None,
-        allow_demo: bool = False
+        allow_demo: bool = False,
+        custom_buy_price_cny: Optional[float] = None,
+        include_indicative_benchmark: bool = True
     ) -> Dict[str, Any]:
         """
         تحلیل ۳۶۰ درجه و تمام‌عیار با سناریوهای ۳گانه، امتیاز تطبیق، ارزیابی ریسک و ثبت در دیتابیس
         """
         # 1. Base report
-        report = self.analyze_product(product_query, category, custom_target_iran_price, batch_quantity, allow_demo=allow_demo)
+        report = self.analyze_product(
+            product_query,
+            category,
+            custom_target_iran_price,
+            batch_quantity,
+            allow_demo=allow_demo,
+            custom_buy_price_cny=custom_buy_price_cny,
+            include_indicative_benchmark=include_indicative_benchmark
+        )
         best_sup = report.best_supplier
         cat = report.category
         target_price = custom_target_iran_price or (report.iran_market.average_price_toman if report.iran_market else None)
@@ -259,6 +353,10 @@ class ChinaIranImportAgent:
             "query": product_query,
             "category": cat,
             "insufficient_data": report.insufficient_data,
+            "is_simulation": report.is_simulation,
+            "definite_profit_calculable": report.definite_profit_calculable,
+            "missing_requirements": report.missing_requirements,
+            "data_provenance": report.data_provenance.model_dump() if report.data_provenance else None,
             "report": report.model_dump(),
             "chinese_keyword": chinese_kw,
             "b2b_platforms": b2b_links,

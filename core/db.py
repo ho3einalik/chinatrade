@@ -176,17 +176,26 @@ class Database:
             conn.commit()
             return cursor.lastrowid
 
-    def get_supplier_quotes_for_query(self, query: str) -> List[Dict[str, Any]]:
-        """Finds stored proformas or CSV quotes matching terms in product title."""
-        words = [w for w in query.strip().split() if len(w) > 1]
+    def get_supplier_quotes_for_query(self, query: str, extra_terms: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """Finds stored proformas or CSV quotes matching terms in product title or supplier name."""
+        terms = [w for w in query.strip().split() if len(w) > 1]
+        if extra_terms:
+            for et in extra_terms:
+                if et and isinstance(et, str):
+                    for w in et.strip().split():
+                        if len(w) > 1 and w not in terms:
+                            terms.append(w)
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            if not words:
+            if not terms:
                 cursor.execute("SELECT * FROM supplier_quotes ORDER BY id DESC LIMIT 5")
                 return [dict(r) for r in cursor.fetchall()]
 
-            conditions = " OR ".join(["product_title LIKE ?"] * len(words))
-            params = [f"%{w}%" for w in words]
+            conditions = " OR ".join(["(product_title LIKE ? OR supplier_name LIKE ?)"] * len(terms))
+            params = []
+            for t in terms:
+                params.extend([f"%{t}%", f"%{t}%"])
             cursor.execute(f"SELECT * FROM supplier_quotes WHERE {conditions} ORDER BY id DESC LIMIT 10", params)
             return [dict(r) for r in cursor.fetchall()]
 

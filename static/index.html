@@ -236,23 +236,101 @@
 
                 <!-- تب ۱: داشبورد اصلی واردات چین -->
                 <div id="tab-dashboard" class="space-y-5">
-                    <div id="insufficient-data-banner" class="hidden bg-amber-50/90 border border-amber-200 rounded-2xl p-4 text-amber-900 shadow-xs">
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
-                            <div class="space-y-1">
-                                <div class="font-bold text-sm">عدم کفایت داده‌ها برای محاسبه قطعی سودآوری (Insufficient Data)</div>
-                                <div class="text-xs text-amber-800 leading-relaxed">
-                                    هنوز پیش‌فاکتور قطعی از تأمین‌کننده چین یا قیمت معتبر در بازار ایران ثبت نشده است. این سیستم طبق قانون شفافیت تجاری، از ساختن سودهای خیالی خودداری می‌کند. 
-                                    لطفاً از بخش «ورود دستی / CSV» پیش‌فاکتور کارخانه را ثبت کنید یا از لینک‌های جستجوی زنده در تب «سورس‌های چین» استعلام بگیرید.
+                    <!-- شناسنامه اصالت و وضعیت تفکیک‌شده داده‌ها -->
+                    <div id="data-provenance-card" class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" id="provenance-pulse"></span>
+                                <span class="font-extrabold text-xs text-slate-800">شناسنامه وضعیت داده‌ها و سناریوی محاسبه (Data Provenance Status)</span>
+                            </div>
+                            <div id="provenance-mode-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800">
+                                در حال تحلیل اولیه
+                            </div>
+                        </div>
+
+                        <!-- ۴ ستون تفکیک وضعیت مؤلفه‌ها -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+                            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-500 text-[10px] font-bold">۱. خرید از چین</span>
+                                    <span id="prov-supp-badge" class="px-1.5 py-0.5 rounded text-[9px] font-black bg-slate-200 text-slate-700">ناموجود</span>
                                 </div>
-                                <div class="flex gap-2 pt-2">
-                                    <button onclick="switchTab('manual')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all">
-                                        ثبت پیش‌فاکتور چین یا قیمت بازار
-                                    </button>
-                                    <button onclick="switchTab('sources')" class="px-3 py-1.5 bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 rounded-lg text-xs font-bold transition-all">
-                                        مشاهده لینک‌های جستجوی چین
-                                    </button>
+                                <div class="font-black text-sm text-slate-900" id="prov-supp-val">-- ¥</div>
+                                <div class="text-[10px] text-slate-400 truncate" id="prov-supp-src">منبع: نامشخص</div>
+                            </div>
+
+                            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-500 text-[10px] font-bold">۲. بازار فروش ایران</span>
+                                    <span id="prov-market-badge" class="px-1.5 py-0.5 rounded text-[9px] font-black bg-slate-200 text-slate-700">ناموجود</span>
                                 </div>
+                                <div class="font-black text-sm text-slate-900" id="prov-market-val">-- تومان</div>
+                                <div class="text-[10px] text-slate-400 truncate" id="prov-market-src">منبع: استعلام زنده</div>
+                            </div>
+
+                            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-500 text-[10px] font-bold">۳. کرایه حمل بین‌الملل</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800">فرمول رسمی</span>
+                                </div>
+                                <div class="font-black text-sm text-slate-900" id="prov-shipping-val">IATA & CBM</div>
+                                <div class="text-[10px] text-slate-400 truncate">هوایی $6.5/kg • دریایی $180/cbm</div>
+                            </div>
+
+                            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-500 text-[10px] font-bold">۴. حقوق گمرک و مقررات</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800">کتاب تعرفه</span>
+                                </div>
+                                <div class="font-black text-sm text-slate-900" id="prov-tariff-val">HS: --</div>
+                                <div class="text-[10px] text-slate-400 truncate" id="prov-tariff-src">کتاب مقررات سال جاری</div>
+                            </div>
+                        </div>
+
+                        <!-- باکس راهنما و کمبودهای احتمالی -->
+                        <div id="provenance-note-box" class="p-2.5 rounded-xl text-[11px] leading-relaxed flex items-center justify-between gap-3 bg-sky-50 text-sky-900 border border-sky-100">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="info" class="w-4 h-4 text-sky-600 shrink-0"></i>
+                                <span id="provenance-note-text">سیستم آماده اجرای سناریوی محاسبه سودآوری است.</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <button onclick="switchTab('manual')" class="px-2.5 py-1 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-lg text-[10px] font-bold transition-all">
+                                    ثبت پیش‌فاکتور
+                                </button>
+                                <button onclick="switchTab('sources')" class="px-2.5 py-1 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-lg text-[10px] font-bold transition-all">
+                                    لینک‌های چین
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- نوار ماشین‌حساب سناریوی سریع و درلحظه -->
+                    <div id="quick-scenario-bar" class="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white rounded-2xl p-4 shadow-sm border border-slate-800">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="sliders" class="w-4 h-4 text-sky-400"></i>
+                                <span class="text-xs font-black text-white">ماشین‌حساب سناریوسازی سریع (Interactive Scenario Simulator)</span>
+                            </div>
+                            <span class="text-[10px] text-slate-300">قیمت خرید پیشنهادی را تغییر دهید و نتایج سود و بهای تمام‌شده را آنی بازتولید کنید.</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-end">
+                            <div>
+                                <label class="text-[10px] text-slate-300 font-bold block mb-1">قیمت خرید چین (یوان ¥):</label>
+                                <input id="quick-buy-cny" type="number" step="0.1" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-sky-400 font-mono" placeholder="مثال: 55">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-300 font-bold block mb-1">قیمت فروش ایران (تومان):</label>
+                                <input id="quick-sell-toman" type="number" step="1000" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-sky-400 font-mono" placeholder="مثال: 2500000">
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-slate-300 font-bold block mb-1">تیراژ سفارش (عدد):</label>
+                                <input id="quick-quantity" type="number" step="10" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-sky-400 font-mono" placeholder="مثال: 100">
+                            </div>
+                            <div>
+                                <button onclick="applyQuickScenario()" class="w-full bg-sky-400 hover:bg-sky-500 text-slate-950 font-black py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm">
+                                    <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                                    <span>محاسبه فوری سناریو</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1344,16 +1422,25 @@
             const query = document.getElementById('productSearchInput').value.trim();
             if (!query) return;
 
+            const buyCny = parseFloat(document.getElementById('quick-buy-cny')?.value) || null;
+            const sellToman = parseFloat(document.getElementById('quick-sell-toman')?.value) || null;
+            const qty = parseInt(document.getElementById('quick-quantity')?.value) || null;
+
             const progressEl = document.getElementById('searchProgressIndicator');
             const stepText = document.getElementById('searchStepText');
             progressEl.classList.remove('hidden');
-            stepText.innerText = `🔍 استعلام زنده دیجی‌کالا و سورسینگ در ۱۶۸۸، EHSY و Gongchang...`;
+            stepText.innerText = `🔍 استعلام زنده دیجی‌کالا و سورسینگ در ۱۶۸۸، علی‌بابا، علی‌اکسپرس و EHSY...`;
 
             try {
+                const payload = { product: query };
+                if (buyCny) payload.custom_buy_price_cny = buyCny;
+                if (sellToman) payload.target_price = sellToman;
+                if (qty) payload.quantity = qty;
+
                 const response = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ product: query })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
@@ -1367,54 +1454,174 @@
             }
         }
 
+        async function applyQuickScenario() {
+            const query = document.getElementById('productSearchInput').value.trim();
+            if (!query) {
+                alert('لطفاً ابتدا نام محصول مورد نظر را در کادر جستجو وارد کنید.');
+                return;
+            }
+            const buyCny = parseFloat(document.getElementById('quick-buy-cny').value) || null;
+            const sellToman = parseFloat(document.getElementById('quick-sell-toman').value) || null;
+            const qty = parseInt(document.getElementById('quick-quantity').value) || null;
+
+            const progressEl = document.getElementById('searchProgressIndicator');
+            const stepText = document.getElementById('searchStepText');
+            progressEl.classList.remove('hidden');
+            stepText.innerText = `⚡ در حال محاسبه آنی سناریو با قیمت‌های ورودی...`;
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        product: query,
+                        custom_buy_price_cny: buyCny,
+                        target_price: sellToman,
+                        quantity: qty
+                    })
+                });
+
+                const data = await response.json();
+                fullData = data;
+                renderAll(data);
+                progressEl.classList.add('hidden');
+            } catch (err) {
+                console.error(err);
+                progressEl.classList.add('hidden');
+                alert('خطا در به‌روزرسانی سناریو.');
+            }
+        }
+
         function renderAll(data) {
             const r = data.report;
-            const banner = document.getElementById('insufficient-data-banner');
+            const prov = data.data_provenance || (r ? r.data_provenance : null);
 
-            if (r.insufficient_data) {
-                if (banner) banner.classList.remove('hidden');
-                document.getElementById('dash-net-profit').innerText = 'اطلاعات ناکافی';
+            // ۱. تنظیم شناسنامه وضعیت داده‌ها
+            const modeBadge = document.getElementById('provenance-mode-badge');
+            const noteText = document.getElementById('provenance-note-text');
+            const noteBox = document.getElementById('provenance-note-box');
+
+            if (prov) {
+                if (prov.calculation_mode === 'DEFINITE_CONTRACT') {
+                    modeBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800';
+                    modeBadge.innerText = 'قرارداد قطعی بازرگانی (Definite Contract)';
+                    noteBox.className = 'p-2.5 rounded-xl text-[11px] leading-relaxed flex items-center justify-between gap-3 bg-emerald-50 text-emerald-900 border border-emerald-100';
+                    noteText.innerText = 'پیش‌فاکتور کارخانه و قیمت بازار ایران هر دو قطعی و تأییدشده هستند.';
+                } else if (prov.calculation_mode === 'SCENARIO_SIMULATION') {
+                    modeBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800';
+                    modeBadge.innerText = 'شبیه‌سازی سناریویی بر مبنای نرخ‌های مرجع (Scenario Simulation)';
+                    noteBox.className = 'p-2.5 rounded-xl text-[11px] leading-relaxed flex items-center justify-between gap-3 bg-sky-50 text-sky-900 border border-sky-100';
+                    noteText.innerText = (prov.missing_for_definite && prov.missing_for_definite.length) 
+                        ? prov.missing_for_definite[0] 
+                        : 'این سناریو بر اساس نرخ مرجع صنعتی چین شبیه‌سازی شده است.';
+                } else {
+                    modeBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800';
+                    modeBadge.innerText = 'کشف کالا و استخراج ضوابط (Discovery Mode)';
+                    noteBox.className = 'p-2.5 rounded-xl text-[11px] leading-relaxed flex items-center justify-between gap-3 bg-amber-50 text-amber-900 border border-amber-100';
+                    noteText.innerText = (prov.missing_for_definite && prov.missing_for_definite.length) 
+                        ? prov.missing_for_definite[0] 
+                        : 'جهت محاسبه سود، قیمت پیشنهادی خرید را در ماشین‌حساب سناریو وارد نمایید.';
+                }
+
+                // قیمت چین در شناسنامه
+                const sBadge = document.getElementById('prov-supp-badge');
+                const sVal = document.getElementById('prov-supp-val');
+                const sSrc = document.getElementById('prov-supp-src');
+                if (prov.supplier_price_status === 'REAL_VERIFIED') {
+                    sBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800';
+                    sBadge.innerText = 'پیش‌فاکتور قطعی';
+                } else if (prov.supplier_price_status === 'USER_MANUAL') {
+                    sBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-black bg-sky-100 text-sky-800';
+                    sBadge.innerText = 'ورود دستی';
+                } else if (prov.supplier_price_status === 'ESTIMATED') {
+                    sBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-100 text-blue-800';
+                    sBadge.innerText = 'نرخ مرجع صنعتی';
+                } else {
+                    sBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-800';
+                    sBadge.innerText = 'ناموجود';
+                }
+                sVal.innerText = prov.supplier_price_value ? `${prov.supplier_price_value} ¥` : 'ناموجود';
+                sSrc.innerText = `منبع: ${prov.supplier_price_source || 'نامشخص'}`;
+
+                // بازار ایران در شناسنامه
+                const mBadge = document.getElementById('prov-market-badge');
+                const mVal = document.getElementById('prov-market-val');
+                const mSrc = document.getElementById('prov-market-src');
+                if (prov.iran_market_status === 'REAL_VERIFIED') {
+                    mBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800';
+                    mBadge.innerText = 'استعلام زنده API';
+                } else if (prov.iran_market_status === 'USER_MANUAL') {
+                    mBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-black bg-sky-100 text-sky-800';
+                    mBadge.innerText = 'دستی کاربر';
+                } else {
+                    mBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-800';
+                    mBadge.innerText = 'ناموجود';
+                }
+                mVal.innerText = prov.iran_market_value_toman ? `${Math.round(prov.iran_market_value_toman).toLocaleString()} ت` : 'ناموجود';
+                mSrc.innerText = `منبع: ${prov.iran_market_source || 'نامشخص'}`;
+
+                // تعرفه گمرک
+                document.getElementById('prov-tariff-val').innerText = `HS: ${prov.hs_code}`;
+            }
+
+            // ۲. پیش‌فرض کردن مقادیر در ماشین‌حساب سریع
+            const qBuy = document.getElementById('quick-buy-cny');
+            const qSell = document.getElementById('quick-sell-toman');
+            const qQty = document.getElementById('quick-quantity');
+            if (qBuy && prov && prov.supplier_price_value && !qBuy.value) {
+                qBuy.value = prov.supplier_price_value;
+            }
+            if (qSell && prov && prov.iran_market_value_toman && !qSell.value) {
+                qSell.value = Math.round(prov.iran_market_value_toman);
+            }
+            if (qQty && !qQty.value) {
+                qQty.value = (data.sea_scenarios && data.sea_scenarios.batch_quantity) ? data.sea_scenarios.batch_quantity : 100;
+            }
+
+            // ۳. رندر کارت‌های متریک سود و بهای تمام‌شده
+            const sea = data.sea_scenarios ? data.sea_scenarios.realistic : null;
+            const air = data.air_scenarios ? data.air_scenarios.realistic : null;
+            const chosen = sea || air;
+
+            if (chosen) {
+                const isSim = Boolean(data.is_simulation || (r && r.is_simulation));
+                const simBadge = isSim ? ' <span class="text-[10px] bg-sky-500/30 text-sky-200 px-2 py-0.5 rounded-full font-bold">شبیه‌سازی</span>' : '';
+                document.getElementById('dash-net-profit').innerHTML = `${chosen.net_profit_unit_toman.toLocaleString()} ت${simBadge}`;
+                document.getElementById('dash-roi').innerText = `${chosen.roi_percent}%`;
+                document.getElementById('dash-box-china').innerText = `${r.best_supplier ? r.best_supplier.unit_price_cny : (r.air_cost_analysis ? r.air_cost_analysis.purchase_price_cny : '--')} ¥`;
+                document.getElementById('dash-box-landed').innerText = `${Math.round(chosen.landed_cost_unit_toman / 1000)}k ت`;
+                document.getElementById('dash-box-sell').innerText = `${Math.round(chosen.target_selling_price_toman / 1000)}k ت`;
+                document.getElementById('dash-margin').innerText = `${chosen.margin_percent}%`;
+
+                if (data.sea_scenarios && data.air_scenarios && data.sea_scenarios.realistic && data.air_scenarios.realistic) {
+                    const airLanded = Math.round(data.air_scenarios.realistic.landed_cost_unit_toman / 1000);
+                    const seaLanded = Math.round(data.sea_scenarios.realistic.landed_cost_unit_toman / 1000);
+                    document.getElementById('dash-shipping').innerText = `هوایی: ${airLanded}k | دریایی: ${seaLanded}k ت`;
+                }
+
+                const custIdx = chosen.line_items.findIndex(i => i.name_en === 'customs_duty');
+                const vatIdx = chosen.line_items.findIndex(i => i.name_en === 'vat');
+                const finIdx = chosen.line_items.findIndex(i => i.name_en === 'financing_cost');
+
+                const custDuty = custIdx >= 0 ? chosen.line_items[custIdx].amount_toman : 0;
+                const commBen = custIdx >= 0 && chosen.line_items[custIdx+1] ? chosen.line_items[custIdx+1].amount_toman : 0;
+                const vatVal = vatIdx >= 0 ? chosen.line_items[vatIdx].amount_toman : 0;
+                const finVal = finIdx >= 0 ? chosen.line_items[finIdx].amount_toman : 0;
+
+                document.getElementById('dash-customs').innerText = `${(custDuty + commBen).toLocaleString()} ت`;
+                document.getElementById('dash-vat').innerText = `${vatVal.toLocaleString()} ت`;
+                document.getElementById('dash-financing').innerText = `${finVal.toLocaleString()} ت`;
+            } else {
+                document.getElementById('dash-net-profit').innerText = 'در انتظار ورود قیمت';
                 document.getElementById('dash-roi').innerText = '-';
                 document.getElementById('dash-box-china').innerText = '--';
                 document.getElementById('dash-box-landed').innerText = '--';
-                document.getElementById('dash-box-sell').innerText = '--';
+                document.getElementById('dash-box-sell').innerText = (r && r.iran_market && r.iran_market.average_price_toman) ? `${Math.round(r.iran_market.average_price_toman / 1000)}k ت` : '--';
                 document.getElementById('dash-margin').innerText = '-';
-                document.getElementById('dash-customs').innerText = '-';
-                document.getElementById('dash-vat').innerText = '-';
+                document.getElementById('dash-customs').innerText = 'تعرفه قانونی ۴٪ + ۱۱٪';
+                document.getElementById('dash-vat').innerText = '۱۰٪ ارزش CIF';
                 document.getElementById('dash-financing').innerText = '-';
-                document.getElementById('dash-shipping').innerText = 'محاسبه نیازمند داده قطعی است';
-            } else {
-                if (banner) banner.classList.add('hidden');
-                const sea = data.sea_scenarios ? data.sea_scenarios.realistic : null;
-                const air = data.air_scenarios ? data.air_scenarios.realistic : null;
-                const chosen = sea || air;
-
-                if (chosen) {
-                    document.getElementById('dash-net-profit').innerText = `${chosen.net_profit_unit_toman.toLocaleString()} ت`;
-                    document.getElementById('dash-roi').innerText = `${chosen.roi_percent}%`;
-                    document.getElementById('dash-box-china').innerText = `${r.air_cost_analysis ? r.air_cost_analysis.purchase_price_cny : '--'} ¥`;
-                    document.getElementById('dash-box-landed').innerText = `${Math.round(chosen.landed_cost_unit_toman / 1000)}k ت`;
-                    document.getElementById('dash-box-sell').innerText = `${Math.round(chosen.target_selling_price_toman / 1000)}k ت`;
-                    document.getElementById('dash-margin').innerText = `${chosen.margin_percent}%`;
-                }
-
-                if (data.sea_scenarios && data.air_scenarios && data.sea_scenarios.realistic && data.air_scenarios.realistic) {
-                    document.getElementById('dash-shipping').innerText = `هوایی: ${Math.round(data.air_scenarios.realistic.line_items[4].amount_toman / 1000)}k | دریایی: ${Math.round(data.sea_scenarios.realistic.line_items[4].amount_toman / 1000)}k ت`;
-                }
-                if (chosen) {
-                    const custIdx = chosen.line_items.findIndex(i => i.name_en === 'customs_duty');
-                    const vatIdx = chosen.line_items.findIndex(i => i.name_en === 'vat');
-                    const finIdx = chosen.line_items.findIndex(i => i.name_en === 'financing_cost');
-
-                    const custDuty = custIdx >= 0 ? chosen.line_items[custIdx].amount_toman : 0;
-                    const commBen = custIdx >= 0 && chosen.line_items[custIdx+1] ? chosen.line_items[custIdx+1].amount_toman : 0;
-                    const vatVal = vatIdx >= 0 ? chosen.line_items[vatIdx].amount_toman : 0;
-                    const finVal = finIdx >= 0 ? chosen.line_items[finIdx].amount_toman : 0;
-
-                    document.getElementById('dash-customs').innerText = `${(custDuty + commBen).toLocaleString()} ت`;
-                    document.getElementById('dash-vat').innerText = `${vatVal.toLocaleString()} ت`;
-                    document.getElementById('dash-financing').innerText = `${finVal.toLocaleString()} ت`;
-                }
+                document.getElementById('dash-shipping').innerText = 'IATA: $6.5/kg | CBM: $180';
             }
 
             document.getElementById('dash-hscode').innerText = `HS: ${data.regulations.primary_hs_code}`;
@@ -1438,6 +1645,7 @@
                     let sBadge = '<span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold mr-1">تأمین‌کننده</span>';
                     if (s.data_type === 'manual_quote') sBadge = '<span class="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold mr-1">پیش‌فاکتور دستی</span>';
                     else if (s.data_type === 'csv_import') sBadge = '<span class="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold mr-1">ورود CSV</span>';
+                    else if (s.data_type === 'estimate') sBadge = '<span class="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold mr-1">نرخ مرجع صنعتی</span>';
 
                     const item = document.createElement('div');
                     item.className = 'p-3 bg-slate-50 rounded-2xl flex justify-between items-center text-xs';
@@ -1557,12 +1765,12 @@
             if (!fullData || !fullData.sea_scenarios || !fullData.sea_scenarios[type]) {
                 if (cards) {
                     cards.innerHTML = `
-                        <div class="col-span-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-center text-amber-900 text-xs font-bold">
-                            محاسبه سناریو نیازمند ثبت پیش‌فاکتور قطعی و قیمت فروش هدف است.
+                        <div class="col-span-4 p-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-slate-700 text-xs font-bold">
+                            جهت مشاهده ریز اقلام هزینه و برآورد سود، قیمت پیشنهادی خرید را در نوار ماشین‌حساب سناریو در بالای صفحه وارد نمایید.
                         </div>
                     `;
                 }
-                if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-400">هیچ قلم هزینه‌ای به دلیل نبود داده قطعی محاسبه نشد.</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-400">اقلام هزینه به محض تعیین قیمت خرید یا فروش در ماشین‌حساب سناریو محاسبه خواهند شد.</td></tr>';
                 return;
             }
             const scen = fullData.sea_scenarios[type] || fullData.air_scenarios[type];

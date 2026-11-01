@@ -209,25 +209,92 @@ class ChinaSourcingEngine:
             }
         return links
 
+    def get_indicative_benchmark(self, query: str, category: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        برآورد بازه و نرخ پایه مرجع صنعتی چین بر اساس مشخصات کاتالوگ کارخانجات برای شبیه‌سازی سناریو
+        """
+        benchmarks = {
+            "ساعت هوشمند": {"price_cny": 55.0, "moq": 100, "weight_kg": 0.12, "volume_cbm": 0.0004, "category": "گجت و الکترونیک"},
+            "smart watch": {"price_cny": 55.0, "moq": 100, "weight_kg": 0.12, "volume_cbm": 0.0004, "category": "گجت و الکترونیک"},
+            "ایرپاد": {"price_cny": 38.0, "moq": 200, "weight_kg": 0.08, "volume_cbm": 0.0003, "category": "گجت و الکترونیک"},
+            "هندزفری بلوتوث": {"price_cny": 35.0, "moq": 200, "weight_kg": 0.08, "volume_cbm": 0.0003, "category": "گجت و الکترونیک"},
+            "earbuds": {"price_cny": 38.0, "moq": 200, "weight_kg": 0.08, "volume_cbm": 0.0003, "category": "گجت و الکترونیک"},
+            "پاوربانک": {"price_cny": 48.0, "moq": 100, "weight_kg": 0.38, "volume_cbm": 0.0006, "category": "گجت و الکترونیک"},
+            "power bank": {"price_cny": 48.0, "moq": 100, "weight_kg": 0.38, "volume_cbm": 0.0006, "category": "گجت و الکترونیک"},
+            "پودر pvc": {"price_cny": 6.8, "moq": 1000, "weight_kg": 25.0, "volume_cbm": 0.04, "category": "پتروشیمی و پلیمر"},
+            "pvc": {"price_cny": 6.8, "moq": 1000, "weight_kg": 25.0, "volume_cbm": 0.04, "category": "پتروشیمی و پلیمر"},
+            "پلی اتیلن": {"price_cny": 8.5, "moq": 1000, "weight_kg": 25.0, "volume_cbm": 0.04, "category": "پتروشیمی و پلیمر"},
+            "hdpe": {"price_cny": 8.5, "moq": 1000, "weight_kg": 25.0, "volume_cbm": 0.04, "category": "پتروشیمی و پلیمر"},
+            "پلی پروپیلن": {"price_cny": 8.2, "moq": 1000, "weight_kg": 25.0, "volume_cbm": 0.04, "category": "پتروشیمی و پلیمر"},
+            "pp": {"price_cny": 8.2, "moq": 1000, "weight_kg": 25.0, "volume_cbm": 0.04, "category": "پتروشیمی و پلیمر"},
+            "پت": {"price_cny": 7.6, "moq": 1000, "weight_kg": 25.0, "volume_cbm": 0.04, "category": "پتروشیمی و پلیمر"},
+            "pet": {"price_cny": 7.6, "moq": 1000, "weight_kg": 25.0, "volume_cbm": 0.04, "category": "پتروشیمی و پلیمر"},
+            "دریل شارژی": {"price_cny": 95.0, "moq": 50, "weight_kg": 1.8, "volume_cbm": 0.005, "category": "ابزارآلات صنعتی"},
+            "دریل": {"price_cny": 85.0, "moq": 50, "weight_kg": 1.5, "volume_cbm": 0.004, "category": "ابزارآلات صنعتی"},
+            "ابزار": {"price_cny": 65.0, "moq": 50, "weight_kg": 1.0, "volume_cbm": 0.003, "category": "ابزارآلات صنعتی"},
+            "ماساژور تفنگی": {"price_cny": 68.0, "moq": 100, "weight_kg": 0.9, "volume_cbm": 0.002, "category": "لوازم خانگی و سلامت"},
+            "ماساژور": {"price_cny": 55.0, "moq": 100, "weight_kg": 0.8, "volume_cbm": 0.002, "category": "لوازم خانگی و سلامت"},
+            "اسپیکر بلوتوث": {"price_cny": 42.0, "moq": 100, "weight_kg": 0.45, "volume_cbm": 0.001, "category": "گجت و الکترونیک"},
+            "دوربین مداربسته": {"price_cny": 85.0, "moq": 50, "weight_kg": 0.5, "volume_cbm": 0.0015, "category": "گجت و الکترونیک"},
+            "لوازم خودرو": {"price_cny": 50.0, "moq": 100, "weight_kg": 0.8, "volume_cbm": 0.002, "category": "قطعات خودرو"},
+            "قطعات خودرو": {"price_cny": 50.0, "moq": 100, "weight_kg": 0.8, "volume_cbm": 0.002, "category": "قطعات خودرو"},
+            "لنت ترمز": {"price_cny": 28.0, "moq": 100, "weight_kg": 1.2, "volume_cbm": 0.002, "category": "قطعات خودرو"},
+            "فیلتر هوا": {"price_cny": 12.0, "moq": 200, "weight_kg": 0.25, "volume_cbm": 0.001, "category": "قطعات خودرو"},
+            "کمک فنر": {"price_cny": 65.0, "moq": 50, "weight_kg": 3.0, "volume_cbm": 0.006, "category": "قطعات خودرو"},
+            "تسمه": {"price_cny": 15.0, "moq": 200, "weight_kg": 0.15, "volume_cbm": 0.0005, "category": "قطعات خودرو"},
+            "چراغ خودرو": {"price_cny": 110.0, "moq": 30, "weight_kg": 2.2, "volume_cbm": 0.008, "category": "قطعات خودرو"},
+            "لوازم خانگی": {"price_cny": 45.0, "moq": 100, "weight_kg": 1.1, "volume_cbm": 0.003, "category": "لوازم خانگی"},
+            "کابل شارژ": {"price_cny": 3.5, "moq": 500, "weight_kg": 0.03, "volume_cbm": 0.0001, "category": "گجت و الکترونیک"},
+        }
+        q_lower = query.lower().strip()
+        for k, v in benchmarks.items():
+            if k in q_lower:
+                return v
+        return None
+
     def search_suppliers(
         self,
         query: str,
         category: Optional[str] = None,
-        allow_demo: bool = False
+        allow_demo: bool = False,
+        custom_buy_price_cny: Optional[float] = None,
+        include_indicative_benchmark: bool = True
     ) -> List[ChineseSupplier]:
         """
         سورسینگ تأمین‌کنندگان چین:
-        ۱. بررسی پیش‌فاکتورها و رکوردهای واقعی ثبت‌شده در پایگاه داده SQLite
-        ۲. در صورت نبود داده واقعی:
-           - اگر allow_demo=False باشد (پیش‌فرض محیط تولید)، لیست خالی برمی‌گرداند.
-           - اگر allow_demo=True باشد، صرفاً برای تست توسعه نمونه آموزشی با برچسب صریح DEMO تولید می‌شود.
+        ۱. بررسی ورودی دستی مستقیم کاربر
+        ۲. بررسی پیش‌فاکتورها و رکوردهای واقعی ثبت‌شده در پایگاه داده SQLite (جستجوی چندزبانه)
+        ۳. در صورت نبود پیش‌فاکتور، استخراج نرخ مرجع صنعتی جهت امکان شبیه‌سازی سناریو
+        ۴. در غیر این صورت، لیست خالی بازمی‌گرداند.
         """
+        # ۱. قیمت دستی مستقیم وارد شده توسط کاربر
+        if custom_buy_price_cny and custom_buy_price_cny > 0:
+            return [
+                ChineseSupplier(
+                    name="مظنه مستقیم کاربر (User Manual Quote)",
+                    platform="User Manual Input",
+                    product_title=f"{query} (قیمت استعلامی کاربر)",
+                    unit_price_cny=float(custom_buy_price_cny),
+                    moq=100,
+                    supplier_tier="قیمت استعلام‌شده مستقیم کاربر",
+                    source_url="",
+                    data_type=DataType.MANUAL_QUOTE,
+                    incoterms=Incoterms.EXW,
+                    verification_status=VerificationStatus.MANUAL_OVERRIDE,
+                    confidence_level="USER_MANUAL_INPUT",
+                    is_demo=False,
+                    notes="ثبت‌شده به صورت مستقیم توسط کاربر در فیلد استعلام قیمت چین"
+                )
+            ]
+
         real_suppliers: List[ChineseSupplier] = []
 
-        # ۱. استخراج پیش‌فاکتورها و داده‌های واقعی واردشده توسط کاربر در دیتابیس
+        # ۲. استخراج پیش‌فاکتورها و داده‌های واقعی واردشده توسط کاربر در دیتابیس
         if self.db:
             try:
-                db_quotes = self.db.get_supplier_quotes_for_query(query)
+                en_kw = self.translate_to_english_keywords(query)
+                cn_kw = self.translate_to_chinese_keywords(query)
+                db_quotes = self.db.get_supplier_quotes_for_query(query, extra_terms=[en_kw, cn_kw])
                 for q in db_quotes:
                     real_suppliers.append(ChineseSupplier(
                         name=q["supplier_name"],
@@ -250,14 +317,36 @@ class ChinaSourcingEngine:
         if real_suppliers:
             return real_suppliers
 
-        # ۲. در صورت نبود داده واقعی:
-        if not allow_demo:
-            # عدم تولید دیتای فرضی در پروداکشن
-            return []
+        # ۳. نرخ مرجع صنعتی جهت امکان مدل‌سازی سناریو
+        if include_indicative_benchmark:
+            bench = self.get_indicative_benchmark(query, category)
+            if bench:
+                return [
+                    ChineseSupplier(
+                        name="نرخ پایه مرجع کارخانجات چین (Indicative Benchmark)",
+                        platform="Alibaba / 1688 Reference",
+                        product_title=f"{query} (برآورد مرجع عمده‌فروشی)",
+                        unit_price_cny=float(bench["price_cny"]),
+                        moq=bench["moq"],
+                        weight_kg=bench.get("weight_kg", 0.5),
+                        volume_cbm=bench.get("volume_cbm", 0.001),
+                        supplier_tier="برآورد مرجع صنعتی جهت سناریوسازی",
+                        source_url="https://www.alibaba.com/",
+                        data_type=DataType.ESTIMATE,
+                        incoterms=Incoterms.FOB,
+                        verification_status=VerificationStatus.UNVERIFIED,
+                        confidence_level="ESTIMATED_BENCHMARK",
+                        is_demo=False,
+                        notes="این نرخ تخمینی بر مبنای کاتالوگ صنعتی چین جهت امکان مدل‌سازی سناریو است و پیش‌فاکتور قطعی نیست. برای قرارداد نهایی از لینک‌های جستجوی زنده استعلام بگیرید."
+                    )
+                ]
 
-        # ۳. فقط در صورت درخواست صریح حالت Demo برای محیط توسعه
-        cn_keyword = self.translate_to_chinese_keywords(query)
-        return self._generate_demo_suppliers_with_explicit_label(query, cn_keyword)
+        # ۴. فقط در صورت درخواست صریح حالت Demo برای محیط توسعه
+        if allow_demo:
+            cn_keyword = self.translate_to_chinese_keywords(query)
+            return self._generate_demo_suppliers_with_explicit_label(query, cn_keyword)
+
+        return []
 
     def _generate_demo_suppliers_with_explicit_label(self, query: str, cn_kw: str) -> List[ChineseSupplier]:
         """

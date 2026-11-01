@@ -8,7 +8,6 @@ from typing import Optional, Dict, Any, List
 from decimal import Decimal
 import urllib.parse
 from connectors.base import BaseConnector, ConnectorStatus
-from core.money import Money, Currency, calculate_robust_statistics
 
 class DigikalaConnector(BaseConnector):
     def __init__(self):
@@ -78,6 +77,7 @@ class DigikalaConnector(BaseConnector):
         # Calculate robust statistics (IQR outlier filtering)
         stats = None
         if valid_prices_toman:
+            from core.money import calculate_robust_statistics
             stats = calculate_robust_statistics(valid_prices_toman)
 
         return {
