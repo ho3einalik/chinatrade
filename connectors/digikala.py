@@ -21,7 +21,17 @@ class DigikalaConnector(BaseConnector):
         encoded_query = urllib.parse.quote(query)
         url = f"{self.base_url}?q={encoded_query}&page={page}"
         
-        resp = self.safe_get(url)
+        try:
+            resp = self.safe_get(url)
+        except Exception as e:
+            return {
+                "status": ConnectorStatus.MANUAL_FALLBACK,
+                "query": query,
+                "products_count": 0,
+                "products": [],
+                "statistics": None,
+                "notes": f"اتصال زنده به API دیجی‌کالا در دسترس نیست ({e})"
+            }
         if not resp or resp.status_code != 200:
             return {
                 "status": ConnectorStatus.MANUAL_FALLBACK,

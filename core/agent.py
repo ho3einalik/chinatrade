@@ -68,8 +68,19 @@ class ChinaIranImportAgent:
         # ۲. استخراج قیمت در بازار ایران (استعلام زنده دیجی‌کالا یا قیمت دستی)
         iran_market = self.market_engine.analyze_iran_market(product_query, custom_target_iran_price)
 
-        # تعیین قیمت فروش هدف (در صورت عدم دسترسی: None)
+        # تعیین قیمت فروش هدف (در صورت عدم دسترسی: استفاده از نرخ مرجع در حالت شبیه‌سازی سناریو)
         target_sell_price = custom_target_iran_price or (iran_market.average_price_toman if iran_market else None)
+        is_estimated_market_benchmark = False
+        if (not target_sell_price or target_sell_price <= 0) and include_indicative_benchmark:
+            bench = self.sourcing_engine.get_indicative_benchmark(product_query, category)
+            if bench and bench.get("target_market_price_toman"):
+                target_sell_price = float(bench["target_market_price_toman"])
+                is_estimated_market_benchmark = True
+                if iran_market:
+                    iran_market.average_price_toman = target_sell_price
+                    iran_market.lowest_price_toman = round(target_sell_price * 0.85)
+                    iran_market.highest_price_toman = round(target_sell_price * 1.25)
+                    iran_market.status = "estimated_benchmark"
 
         # ۳. تخمین کد تعرفه گمرکی (HS Code) و الزامات رگولاتوری
         hs_code, regulations, detected_category = self._determine_customs_and_regulations(product_query)
@@ -104,6 +115,10 @@ class ChinaIranImportAgent:
         elif iran_market and iran_market.status == "available" and iran_market.average_price_toman:
             market_status = ComponentStatus.REAL_VERIFIED
             market_source = f"استعلام زنده API دیجی‌کالا ({iran_market.active_sellers_count} کالا)"
+        elif is_estimated_market_benchmark and target_sell_price and target_sell_price > 0:
+            market_status = ComponentStatus.ESTIMATED
+            market_source = "برآورد مرجع بازار ایران (شبیه‌سازی سناریو)"
+            missing_reqs.append("قیمت بازار ایران بر اساس برآورد رده کالایی شبیه‌سازی شد (استعلام زنده دیجی‌کالا در دسترس نبود).")
         else:
             market_status = ComponentStatus.UNAVAILABLE
             market_source = "استعلام زنده نتیجه‌ای نداشت"
