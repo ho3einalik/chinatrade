@@ -1,73 +1,59 @@
-# IMPLEMENTATION AUDIT & BASELINE ASSESSMENT
-**iTrade China Platform - System & Codebase Audit**
-**Date:** 2026-11-01
-**Auditor:** Senior Engineering, Architecture, Data, Scraping, Logistics & QA Team
+# گزارش جامع ممیزی سیستم و پاسخ به ۶ سؤال کلیدی (IMPLEMENTATION_AUDIT.md)
+**پروژه iTrade China - ارزیابی عمیق معماری، منابع داده و رفع نقص‌های محاسباتی**
+**تاریخ ممیزی:** مارس ۲۰۲۶
+**تیم ممیزی:** ارشد مهندسی نرم‌افزار، معماری سیستم، مهندسی داده، لجستیک و امنیت
 
 ---
 
-## 1. Executive Summary & Baseline State
+## ۱. پاسخ تفصیلی و مستند به ۶ سؤال کلیدی مرحله اول
 
-An exhaustive audit of the existing `iTrade China` codebase was conducted. The system was originally built as a prototype with an initial Streamlit UI (`app.py`), a CLI tool (`cli.py`), and a subsequent FastAPI web service (`server.py`) serving a static single-page frontend (`static/index.html`).
+### سؤال ۱: کدام قابلیت‌ها واقعاً پیاده‌سازی شده‌اند؟
+1. **استعلام زنده از API دیجی‌کالا (`connectors/digikala.py`):** ارسال درخواست واقعی HTTP GET به API دیجی‌کالا، استخراج کالاها، تبدیل ریال به تومان، فیلتر کالاهای ناموجود، و محاسبه شاخص‌های آماری مقاوم (IQR، میانه و میانگین پیراسته).
+2. **تولید لینک‌های عمیق جستجو برای پلتفرم‌های چین و ایران (`connectors/china_b2b.py` و `core/iran_market.py`):** تولید لینک‌های پارامتریک مستقیم به EHSY, Gongchang, Makepolo, 1688, ChemNet, YiwuGo, Baidu Aicai, Torob, Emalls, Basalam, Divar.
+3. **ماشین‌حساب بهای تمام‌شده و سناریوسازی ۳گانه (`core/calculator.py`):** پیاده‌سازی کامل با محاسبات دقیق اعشاری `Decimal`، نسخه‌بندی احکام قانونی (`IR-CUSTOMS-1403-1404-V2`)، تفکیک هزینه‌ها بر اساس اینکوترمز (EXW vs FOB vs CIF)، محاسبه نقطه سر به سر و سناریوهای واقع‌بینانه، خوش‌بینانه و بدبینانه.
+4. **موتور استخراج مشخصات و تطبیق هوشمند (`core/matching.py`):** استخراج توان، ولتاژ، ظرفیت، گرید شیمیایی و مدل کالا، محاسبه امتیاز تطبیق و دسته‌بندی در ۴ سطح (EXACT, CLOSE, WEAK, INSUFFICIENT_DATA).
+5. **ممیزی ریسک تأمین‌کننده چین (`core/verification.py`):** ارزیابی خطرات تجاری، بررسی پرچم‌های قرمز (Red Flags) و امتیازدهی ایمنی کارخانه از ۱۰.
+6. **پایگاه داده و پایدارسازی اطلاعات (`core/db.py`):** دیتابیس SQLite با جداول تاریخچه جستجو، اسنپ‌شات‌های حسابرسی‌شده، مظنه‌های تأمین‌کنندگان، تاریخچه قیمت و سیستم هشدار قیمت همراه با مایگریشن خودکار.
+7. **ورود دستی پیش‌فاکتور و آپلود CSV (`connectors/manual_entry.py` و `server.py`):** امکان ثبت تک‌موردی پیش‌فاکتور و آپلود دسته‌ای مظنه‌ها با پشتیبانی از اینکوترمز.
+8. **ثبت استعلام قیمت بازار ایران (`server.py`):** اندپوینت `/api/manual-market-price` برای ثبت قیمت‌های استعلام‌شده فیزیکی یا آنلاین در دیتابیس.
+9. **سیستم تولید گزارش چندفرمت (`core/report_generator.py`):** صدور شناسنامه جامع به فرمت‌های Markdown, HTML و CSV.
+10. **وب‌سرور امن و رابط کاربری تعاملی (`server.py` و `static/index.html`):** داشبورد شیشه‌ای واکنش‌گرا و راست‌چین با قابلیت تغییر تب، ثبت اطلاعات و بازخوانی تاریخچه.
 
-### Baseline Test Execution
-- **Command Executed:** `pytest`
-- **Result:** `collected 0 items / no tests ran in 0.05s (exit code 1)`
-- **Finding:** No automated unit, integration, or regression test suite existed prior to this audit.
+### سؤال ۲: کدام منابع داده واقعاً درخواست شبکه/API دریافت می‌کنند؟
+- **دیجی‌کالا (Digikala):** واقعاً درخواست زنده HTTP به `https://api.digikala.com/v1/search/` ارسال می‌کند و داده‌های زنده JSON را تجزیه می‌نماید.
+- **تست‌های پروب شبکه پلتفرم‌های چین:** در ماژول `connectors/china_b2b.py`، پلتفرم‌های EHSY, Gongchang, Makepolo, ChemNet, YiwuGo و Baidu B2B کدهای HTTP 200 واقعی دریافت کرده‌اند.
+- **پلتفرم‌های مسدود:** پلتفرم QiPeiRen به دلیل فیلترینگ شبکه چین (GFW) و پلتفرم Nala به دلیل قطعی هاست، در حالت خودکار مسدود شناسایی شده و به لینک دستی تبدیل می‌شوند.
+- **پلتفرم‌های مجهز به WAF (ترب و ۱۶۸۸):** به دلیل چالش‌های Cloudflare و Slider CAPTCHA علی‌بابا، سیستم به جای خزش پرخطر و غیرپایدار، از تولید لینک‌های عمیق جستجو و ورود پیش‌فاکتور دستی پشتیبانی می‌کند.
 
----
+### سؤال ۳: کدام قیمت‌ها و اطلاعات از طریق Mock، داده نمونه، مقادیر ثابت یا فرمول‌های تخمینی تولید می‌شدند؟
+*(این بخش در بازنگری فعلی به صورت ریشه‌ای اصلاح و پاک‌سازی شد):*
+- **قبل از اصلاح:** توابع `_generate_gadget_suppliers` و `_generate_chemical_suppliers` در `china_sourcing.py` تأمین‌کنندگان و قیمت‌های ثابت/تصادفی تولید می‌کردند. در `iran_market.py`، در صورت عدم پاسخ دیجی‌کالا، قیمت‌های کف ۴۸,۵۰۰ و سقف ۶۸,۰۰۰ تومان به صورت هاردکد تولید می‌شد و برای ترب، ایمالز، باسلام و دیوار ضرایب ساختگی ضرب می‌شدند (`lowest * 1.03`, `avg * 0.94`, `avg * 0.98`).
+- **پس از اصلاح:** تمام مولدهای داده ساختگی از مسیر تولید حذف شدند. در صورتی که کاربری پیش‌فاکتور وارد نکرده باشد، لیست تأمین‌کنندگان خالی بازگردانده شده و سیستم اعلام `insufficient_data` می‌نماید. در بازار ایران، تنها دیجی‌کالا به عنوان API زنده مقداردهی می‌شود و سایر کانال‌ها به صورت لینک استعلام با قیمت `None` نشان داده می‌شوند مگر آنکه کاربر در دیتابیس قیمت دستی ثبت کرده باشد. حالت `demo` تنها در صورتی فعال می‌شود که صریحاً `allow_demo=True` ارسال شود.
 
-## 2. Component-by-Component Classification
+### سؤال ۴: کدام قابلیت‌ها فقط در مستندات ذکر شده بودند ولی در جریان واقعی برنامه اجرا نمی‌شدند؟
+- در نسخه اولیه، مشخصات فنی کالای ایرانی به صورت یک دیکشنری خالی `{}` به موتور تطبیق پاس داده می‌شد که سبب می‌شد تطبیق فنی عملاً بر اساس مشخصات واقعی صورت نپذیرد. این مورد در `core/agent.py` اصلاح شد و ویژگی‌های فنی از عناوین کالا استخراج می‌گردند.
+- محاسبه اثر اینکوترمز (EXW vs FOB vs CIF) در کدهای محاسباتی اولیه نادیده گرفته شده بود و تمام خریدها صرف نظر از نوع فاکتور به یک شکل محاسبه می‌شدند. در نسخه فعلی، هزینه‌های مبدأ و حمل بین‌المللی دقیقاً بر مبنای اینکوترمز تفکیک شدند.
 
-Every feature in the repository has been evaluated and categorized into one of five rigorous tiers:
+### سؤال ۵: کدام مسیرها، APIها یا محاسبات ناقص یا ناامن بودند؟
+- **آسیب‌پذیری SSRF عمیق و DNS Rebinding:** در نسخه اولیه تنها بررسی ساده هاست‌نیم انجام می‌شد که با دامنه‌های مپ‌شده به لوکال‌هاست (مانند `127.0.0.1.nip.io`) دور زده می‌شد. این مورد با رزولوشن واقعی DNS از طریق `socket.getaddrinfo` و اعتبارسنجی تمام IPهای برگشتی در برابر رنج‌های خصوصی (RFC 1918, RFC 3927, Loopback, IPv6 Link-Local/Unique-Local) کاملاً مصون شد.
+- **آپلود فایل CSV بدون محدودیت حجم:** خطر حمله انکار سرویس (DoS) از طریق آپلود فایل‌های بسیار حجیم وجود داشت که با محدودیت ۵ مگابایت و بررسی نامعتبر بودن ساختار هدرها ایمن‌سازی شد.
+- **خطای شناور IEEE 754:** محاسبات مالی اولیه با `float` انجام می‌شد که سبب خطاهای نمایش اعشاری می‌گردید؛ تمام محاسبات به `Decimal` با استراتژی `ROUND_HALF_UP` مهاجرت داده شدند.
 
-| Component / Feature | File Location | Status | Detailed Finding & Deficiencies |
-| :--- | :--- | :--- | :--- |
-| **Digikala API Client** | `core/iran_market.py` | **Maturity: Incomplete** | Direct API query to `https://api.digikala.com/v1/search/` functions live when internet is connected, but lacks pagination, retry backoff, schema validation, outlier filtering, and outlier-resistant median calculation. |
-| **Torob / Emalls / Basalam / Divar** | `core/iran_market.py` | **Maturity: Demo-Only / Mocked** | These channels generate synthetic pricing approximations (e.g. `lowest * 1.03`, `avg * 0.94`) and construct search URLs. They do not parse actual live listings or transactions from these platforms. |
-| **Chinese Suppliers Engine** | `core/china_sourcing.py` | **Maturity: Demo-Only / Mocked** | Contains hardcoded sample factory dictionaries for chemicals, gadgets, tools, and general goods. While URLs point to real domains (1688, EHSY, Gongchang, Makepolo, QiPeiRen), pricing tiers and supplier specs are static templates rather than structured extracts. |
-| **Landed Cost Calculator** | `core/calculator.py` | **Maturity: Incomplete / Flawed** | Uses IEEE 754 `float` for all monetary arithmetic, causing floating-point rounding errors. Lacks distinction between IRR (Rial) and IRT (Toman). Hardcodes 4% tariff, 11% commercial benefit, and 10% VAT without dated legal rule citation. Lacks line items for demurrage, sample inspection, financing cost, and defect allowances. |
-| **Profit & Scenario Engine** | `core/calculator.py` | **Maturity: Incomplete** | Computes only a single deterministic point estimate. Lacks 3-scenario modeling (Optimistic, Realistic, Pessimistic), sensitivity analysis, markup vs margin clarity, and safe handling of zero/negative contribution margins. |
-| **Product Matching Engine** | N/A (Missing) | **Maturity: Not Implemented** | No matching engine exists. Searches match by loose string inclusion without attribute extraction (dimensions, weight, power, voltage, materials, packaging, GTIN/MPN), leaving comparisons vulnerable to false equivalences. |
-| **Opportunity Ranking** | `core/agent.py` | **Maturity: Incomplete** | Calculates an ad-hoc heuristic score (`opp_score`) heavily biased toward raw margin. Does not isolate data confidence from opportunity score, nor does it factor in capital lockup, supplier default risk, or regulatory barriers. |
-| **Supplier Verification** | N/A (Missing) | **Maturity: Demo-Only** | Uses decorative badge strings like `"Verified Super Factory"` without structured entity verification, Chinese legal registration ID checks, credit ratings, or audit trail verification. |
-| **Regulatory & HS Code Module** | `core/agent.py` | **Maturity: Incomplete** | Hardcodes four coarse HS code strings (`8517.62.90`, `3904.10.00`, `8467.21.00`, `8543.70.90`) without dynamic tariff books, regulatory dates, or conditional licensing logic. |
-| **Data Persistence & History** | N/A (Missing) | **Maturity: Not Implemented** | Zero database persistence. All state is ephemeral in memory. No audit logs, no price trend tracking, no historical snapshots, and no reproducible inputs. |
-| **Alerting System** | N/A (Missing) | **Maturity: Not Implemented** | No background scheduler, price change notification, margin drop alert, or connector health watcher. |
-| **Security & Safety** | `server.py` | **Maturity: Vulnerable** | No URL validation (vulnerable to SSRF if user-supplied URLs are fetched), no input sanitization, and no rate limiting. |
-| **FastAPI Web Service & UI** | `server.py`, `static/index.html` | **Maturity: Working & Tested** | Server runs cleanly on port 8000, serving interactive HTML/JS with live calls to `/api/analyze` and `/api/scan`. Needs deep data wiring to replace demo fields with rigorous audit trails. |
-| **Reporting Engine** | `core/report_generator.py` | **Maturity: Working** | Produces Markdown and HTML documents. Needs expansion to support CSV/Excel exports, detailed audit trails, dated sources, and scenario tables. |
-
----
-
-## 3. External Connectivity & Protocol Verification
-
-Live network probes were executed against candidate platforms:
-
-### Chinese Platforms
-1. **EHSY (`https://www.ehsy.com/`):** HTTP 200 OK. Responds with valid MRO catalog data. Verified and operational.
-2. **Gongchang (`https://www.gongchang.com/`):** HTTP 200 OK. Comprehensive factory directory. Verified and operational.
-3. **Makepolo (`https://www.makepolo.com/`):** HTTP 200 OK. Active B2B marketplace search engine. Verified and operational.
-4. **QiPeiRen (`https://www.qipeiren.com/`):** Connection Timeout / Great Firewall Drop. Domestic auto parts portal; drops foreign IP packets without Chinese proxy/WeChat gateway.
-5. **Nala (`https://www.nala.com.cn/`):** HTTP 503 / SSL EOF Failure. Public web frontend decommissioned; services migrated to private WeChat miniprograms.
-6. **YiwuGo (`https://www.yiwugo.com/`):** HTTP 200 OK. Small commodities hub. Verified and operational.
-7. **Baidu B2B (`https://b2b.baidu.com/`):** HTTP 200 OK. Baidu Aicai procurement portal. Verified and operational.
-8. **1688 (`https://www.1688.com/`):** Heavily guarded behind Alibaba Anti-Bot / Sliding CAPTCHA and Aliyun WAF. Automated scraping requires residential China sessions/APIs; manual quotation entry and structured search URL generation are necessary fallbacks.
-
-### Iranian Platforms
-1. **Digikala (`https://api.digikala.com/v1/search/`):** HTTP 200 OK. Responds with structured JSON listing live products, prices in Rials, seller counts, and IDs. Verified and live.
-2. **Torob (`https://torob.com/`):** Returns HTTP 490 Anti-Bot Challenge on direct automated scraping without dedicated proxy; deep linking and fallback models required.
-3. **Emalls (`https://emalls.ir/`):** Functional for user redirection and deep linking.
-4. **Basalam (`https://basalam.com/`):** Search URLs accessible; direct scraping requires token authorization.
+### سؤال ۶: کدام تست‌ها فقط با Mock اجرا می‌شوند و کدام‌یک اتصال واقعی به منبع دارند؟
+- **تست‌های واحد و ایزوله (۳۲ تست):** شامل تست‌های موتور محاسبات اعشاری `Decimal`، اینکوترمز، نقطه سر به سر، موتور تطبیق فنی، امنیت SSRF، آپلود CSV و اندپوینت‌های ثبت دستی بدون نیاز به اینترنت و بدون شکست در CI اجرا می‌شوند.
+- **تست‌های زنده شبکه (۲ تست در `tests/test_live_sources.py`):** با نشان‌گذاری `@pytest.mark.live` جداسازی شده‌اند و عملکرد اتصال زنده دیجی‌کالا و تولید ساخت‌یافته لینک‌های B2B چین را مستقیماً روی بستر وب ارزیابی می‌کنند.
 
 ---
 
-## 4. Phase-by-Phase Remediation Roadmap
+## ۲. خلاصه تغییرات ماژول‌های پروژه
 
-- **Phase A (Now Complete):** Baseline audit and documentation.
-- **Phase B:** Core data structures, precision `Decimal` monetary classes, statistical outlier filtration (IQR & trimmed median).
-- **Phase C:** Multi-dimensional product matching engine with attribute extraction, schema validation, and explainable scoring.
-- **Phase D:** Comprehensive landed cost engine with rule versioning, dated tariff tables, line-item attribution, and 3-scenario Monte Carlo/sensitivity analysis.
-- **Phase E:** Robust connectors architecture (Circuit breakers, retry backoffs, structured fallbacks, manual CSV/JSON data ingestion).
-- **Phase F:** Multi-factor opportunity scoring, supplier verification framework, and import regulatory constraints checking.
-- **Phase G:** Persistent SQLite database (schema, migrations, snapshots, audit log), background alert runner, Excel/CSV exporters, and UI enhancement.
-- **Phase H:** 100% passing test suite (Unit, Integration, E2E) and final documentation verification.
+| ماژول | وضعیت قبل از اصلاح | اصلاحات اعمال‌شده |
+| :--- | :--- | :--- |
+| `core/models.py` | ساختارهای ساده بدون ردگیری اصالت | اضافه شدن `DataType`, `DataFreshness`, `Incoterms`, `VerificationStatus` و فلگ `insufficient_data` |
+| `core/china_sourcing.py` | تولید کارخانه‌ها و قیمت‌های تصادفی/ثابت | حذف کامل مولدهای فیک از مسیر Production؛ استعلام صرفاً از دیتابیس واقعی و لینک‌های عمیق |
+| `core/iran_market.py` | قیمت‌های ثابت هاردکد و ضرایب فرضی | حذف قیمت‌های فرضی؛ اتصال مستقیم به دیجی‌کالا و تعیین وضعیت `no_results` در صورت عدم وجود کالا |
+| `core/calculator.py` | محاسبات ساده تک‌سناریو بدون اینکوترمز | پیاده‌سازی اینکوترمز (EXW/FOB/CIF)، محاسبات خالص `Decimal`، جلوگیری از محاسبه سود در صورت فقدان داده |
+| `core/agent.py` | پاس دادن `{}` خالی برای مشخصات فنی | استخراج مشخصات از داده‌های زنده دیجی‌کالا و مدیریت شفاف عدم کفایت داده‌ها |
+| `core/db.py` | دیتابیس ساده بدون مایگریشن کامل | مایگریشن خودکار فیلدهای `incoterms`, `source_url`, `data_type` روی جداول پیش‌فاکتور و تاریخچه قیمت |
+| `server.py` | اعتبارسنجی ناقص لوکال‌هاست | دفاع کامل SSRF مبتنی بر رزولوشن DNS، سقف حجم آپلود ۵ مگابایت، اندپوینت ثبت قیمت بازار ایران |
+| `static/index.html` | کرش جاوااسکریپت در مقادیر null | مدیریت کامل مقادیر null، نمایش بنر عدم کفایت داده، فرم ثبت قیمت بازار ایران، برچسب‌های نوع داده |

@@ -21,12 +21,12 @@ from core.alerts import AlertEngine
 class ChinaIranImportAgent:
     def __init__(self, config: Optional[TradeConfig] = None):
         self.config = config or CONFIG
-        self.sourcing_engine = ChinaSourcingEngine()
-        self.market_engine = IranMarketEngine()
+        self.db = Database()
+        self.sourcing_engine = ChinaSourcingEngine(self.db)
+        self.market_engine = IranMarketEngine(self.db)
         self.calculator = ImportProfitCalculator(self.config)
         self.matching_engine = ProductMatchingEngine()
         self.b2b_connector = ChinaB2BConnector()
-        self.db = Database()
         self.alert_engine = AlertEngine(self.db)
 
     def analyze_product(
@@ -34,7 +34,8 @@ class ChinaIranImportAgent:
         product_query: str,
         category: Optional[str] = None,
         custom_target_iran_price: Optional[float] = None,
-        batch_quantity: Optional[int] = None
+        batch_quantity: Optional[int] = None,
+        allow_demo: bool = False
     ) -> ImportOpportunityReport:
         """
         تحلیل جامع ۳۶۰ درجه یک کالا:
@@ -44,21 +45,22 @@ class ChinaIranImportAgent:
         ۴. تعیین HS Code و مجوزهای الزامی گمرک
         ۵. ارزیابی ریسک و امتیاز فرصت تجاری
         """
-        # ۱. استخراج تامین‌کنندگان چین
-        suppliers = self.sourcing_engine.search_suppliers(product_query, category)
+        # ۱. استخراج تامین‌کنندگان چین (صرفاً داده‌های واقعی یا پیش‌فاکتورهای ثبت‌شده)
+        suppliers = self.sourcing_engine.search_suppliers(product_query, category, allow_demo=allow_demo)
         best_supplier = suppliers[0] if suppliers else None
 
-        # ۲. استخراج قیمت در بازار ایران
+        # ۲. استخراج قیمت در بازار ایران (استعلام زنده یا قیمت دستی)
         iran_market = self.market_engine.analyze_iran_market(product_query, custom_target_iran_price)
 
-        # تعیین قیمت فروش هدف (معمولاً میانگین بازار یا کمی کمتر برای رقابت‌پذیری بالا)
-        target_sell_price = custom_target_iran_price or iran_market.average_price_toman
+        # تعیین قیمت فروش هدف (در صورت عدم دسترسی: None)
+        target_sell_price = custom_target_iran_price or (iran_market.average_price_toman if iran_market else None)
 
         # ۳. محاسبات دقیق مالی (هوایی و دریایی)
         air_analysis = None
         sea_analysis = None
+        is_insufficient = False
 
-        if best_supplier:
+        if best_supplier and target_sell_price and target_sell_price > 0:
             air_analysis = self.calculator.calculate_landed_cost(
                 supplier=best_supplier,
                 target_iran_price_toman=target_sell_price,
@@ -71,17 +73,21 @@ class ChinaIranImportAgent:
                 shipping_method="Sea Freight",
                 batch_quantity=batch_quantity or max(best_supplier.moq * 2, 500)
             )
+        else:
+            is_insufficient = True
 
         # ۴. تخمین کد تعرفه گمرکی (HS Code) و الزامات رگولاتوری
         hs_code, regulations, detected_category = self._determine_customs_and_regulations(product_query)
 
         # ۵. محاسبه امتیاز جذابیت فرصت (Opportunity Score) از ۱۰
-        opp_score = self._calculate_opportunity_score(air_analysis, sea_analysis, iran_market)
-
-        # ۶. خلاصه استراتژیک برای واردکننده
-        summary = self._generate_recommendation_summary(
-            product_query, best_supplier, air_analysis, sea_analysis, iran_market, opp_score
-        )
+        if not is_insufficient:
+            opp_score = self._calculate_opportunity_score(air_analysis, sea_analysis, iran_market)
+            summary = self._generate_recommendation_summary(
+                product_query, best_supplier, air_analysis, sea_analysis, iran_market, opp_score
+            )
+        else:
+            opp_score = 1.0
+            summary = "داده‌های واقعی تأمین‌کننده چین یا قیمت بازار ایران برای این کالا ناکافی است. هیچ قیمت یا سود ساختگی تولید نشد. لطفاً از طریق تب پیش‌فاکتور/CSV اطلاعات کالا را وارد کنید یا از لینک‌های مستقیم استعلام بگیرید."
 
         return ImportOpportunityReport(
             product_name_fa=product_query,
@@ -95,7 +101,8 @@ class ChinaIranImportAgent:
             air_cost_analysis=air_analysis,
             sea_cost_analysis=sea_analysis,
             opportunity_score=opp_score,
-            recommendation_summary=summary
+            recommendation_summary=summary,
+            insufficient_data=is_insufficient
         )
 
     def analyze_product_comprehensive(
@@ -103,21 +110,22 @@ class ChinaIranImportAgent:
         product_query: str,
         category: Optional[str] = None,
         custom_target_iran_price: Optional[float] = None,
-        batch_quantity: Optional[int] = None
+        batch_quantity: Optional[int] = None,
+        allow_demo: bool = False
     ) -> Dict[str, Any]:
         """
         تحلیل ۳۶۰ درجه و تمام‌عیار با سناریوهای ۳گانه، امتیاز تطبیق، ارزیابی ریسک و ثبت در دیتابیس
         """
-        # 1. Base legacy report
-        report = self.analyze_product(product_query, category, custom_target_iran_price, batch_quantity)
+        # 1. Base report
+        report = self.analyze_product(product_query, category, custom_target_iran_price, batch_quantity, allow_demo=allow_demo)
         best_sup = report.best_supplier
         cat = report.category
-        target_price = custom_target_iran_price or (report.iran_market.average_price_toman if report.iran_market else 1000000)
+        target_price = custom_target_iran_price or (report.iran_market.average_price_toman if report.iran_market else None)
 
         # 2. 3-Scenario Landed Cost Calculations (Air & Sea)
         air_scenarios = None
         sea_scenarios = None
-        if best_sup:
+        if best_sup and target_price and target_price > 0:
             air_scenarios = self.calculator.calculate_landed_cost_scenarios(
                 supplier=best_sup,
                 target_iran_price_toman=target_price,
@@ -131,12 +139,26 @@ class ChinaIranImportAgent:
                 batch_quantity=batch_quantity or max(best_sup.moq * 2, 500)
             )
 
-        # 3. Product Matching Engine Evaluation
+        # 3. Product Matching Engine Evaluation with real Iranian specs extraction
         matching_res = None
         if best_sup and report.iran_market:
+            iran_specs_dict = {}
+            if report.iran_market.sample_products:
+                sp = report.iran_market.sample_products[0]
+                sp_title = sp.get("title") or sp.get("title_fa") or ""
+                extracted = self.matching_engine.extract_specs_from_text(f"{report.iran_market.title_fa} {sp_title}", cat)
+                iran_specs_dict = {
+                    "model": extracted.model,
+                    "capacity_mah": extracted.capacity_mah,
+                    "voltage_volts": extracted.voltage_volts,
+                    "power_watts": extracted.power_watts,
+                    "grade": extracted.grade,
+                    "key_features": extracted.key_features
+                }
+
             matching_res = self.matching_engine.compare_products(
                 iran_title=report.iran_market.title_fa,
-                iran_specs_dict={},
+                iran_specs_dict=iran_specs_dict,
                 china_title=best_sup.product_title,
                 china_specs_dict=best_sup.product_specs,
                 category=cat
@@ -153,11 +175,11 @@ class ChinaIranImportAgent:
         # 6. Multi-Factor Opportunity & Data Confidence Decoupling
         from core.matching import MatchClassification
         match_cls = matching_res.classification if matching_res else MatchClassification.INSUFFICIENT_DATA
-        sample_count = len(report.iran_market.sample_products) if (report.iran_market and report.iran_market.sample_products) else (1 if report.iran_market else 0)
+        sample_count = len(report.iran_market.sample_products) if (report.iran_market and report.iran_market.sample_products) else (1 if report.iran_market and report.iran_market.average_price_toman else 0)
         
-        best_roi = float(air_scenarios.realistic.roi_percent if air_scenarios else 0.0)
-        best_margin = float(air_scenarios.realistic.margin_percent if air_scenarios else 0.0)
-        if sea_scenarios and float(sea_scenarios.realistic.roi_percent) > best_roi:
+        best_roi = float(air_scenarios.realistic.roi_percent if air_scenarios and air_scenarios.realistic else 0.0)
+        best_margin = float(air_scenarios.realistic.margin_percent if air_scenarios and air_scenarios.realistic else 0.0)
+        if sea_scenarios and sea_scenarios.realistic and float(sea_scenarios.realistic.roi_percent) > best_roi:
             best_roi = float(sea_scenarios.realistic.roi_percent)
             best_margin = float(sea_scenarios.realistic.margin_percent)
 
@@ -165,8 +187,8 @@ class ChinaIranImportAgent:
             net_margin_pct=best_margin,
             roi_pct=best_roi,
             sales_velocity_score=report.iran_market.sales_velocity_score if report.iran_market else 5,
-            active_sellers_count=report.iran_market.active_sellers_count if report.iran_market else 1,
-            supplier_years=best_sup.years_active if best_sup else 1,
+            active_sellers_count=report.iran_market.active_sellers_count if report.iran_market else 0,
+            supplier_years=best_sup.years_active if best_sup else 0,
             supplier_has_certs=bool(best_sup.certifications) if best_sup else False,
             has_radio_or_health_barrier=reg_assessment.is_radio_equipment or reg_assessment.is_medical_or_cosmetic,
             is_live_iran_data=any(c.is_live for c in (report.iran_market.channels if report.iran_market else [])),
@@ -180,9 +202,17 @@ class ChinaIranImportAgent:
 
         # Helper serializer for scenarios
         def serialize_scenario_res(scen_obj: Optional[ComprehensiveLandedCostResult]):
-            if not scen_obj:
-                return None
+            if not scen_obj or not scen_obj.is_sufficient_data:
+                return {
+                    "is_sufficient_data": False,
+                    "data_notes": scen_obj.data_notes if scen_obj else "داده‌ها ناکافی است",
+                    "realistic": None,
+                    "optimistic": None,
+                    "pessimistic": None
+                }
             def scen_dict(s):
+                if not s:
+                    return None
                 return {
                     "scenario_type": s.scenario_type,
                     "title_fa": s.scenario_title_fa,
@@ -214,12 +244,91 @@ class ChinaIranImportAgent:
                 "shipping_method": scen_obj.shipping_method,
                 "chargeable_weight_kg": float(scen_obj.chargeable_weight_kg),
                 "volume_cbm": float(scen_obj.volume_cbm),
+                "incoterms": scen_obj.incoterms,
+                "is_sufficient_data": True,
+                "data_notes": scen_obj.data_notes,
                 "realistic": scen_dict(scen_obj.realistic),
                 "optimistic": scen_dict(scen_obj.optimistic),
                 "pessimistic": scen_dict(scen_obj.pessimistic),
                 "fx_sensitivity_10pct_impact_toman": int(scen_obj.fx_sensitivity_10pct_impact_toman),
                 "freight_sensitivity_20pct_impact_toman": int(scen_obj.freight_sensitivity_20pct_impact_toman)
             }
+
+        full_result = {
+            "query": product_query,
+            "category": cat,
+            "insufficient_data": report.insufficient_data,
+            "report": report.model_dump(),
+            "chinese_keyword": chinese_kw,
+            "b2b_platforms": b2b_links,
+            "air_scenarios": serialize_scenario_res(air_scenarios),
+            "sea_scenarios": serialize_scenario_res(sea_scenarios),
+            "matching": {
+                "score": matching_res.score if matching_res else 0.0,
+                "classification": matching_res.classification.value if matching_res else "INSUFFICIENT_DATA",
+                "pros": matching_res.pros if matching_res else [],
+                "cons": matching_res.cons if matching_res else [],
+                "missing_attributes": matching_res.missing_critical_attributes if matching_res else ["هیچ داده تطبیقی استخراج نشد"],
+                "is_conditional": matching_res.is_conditional if matching_res else True
+            } if matching_res else None,
+            "supplier_audit": {
+                "name": supplier_audit.supplier_name if supplier_audit else "",
+                "risk_level": supplier_audit.risk_level if supplier_audit else "UNVERIFIED",
+                "risk_level_fa": supplier_audit.risk_level_fa if supplier_audit else "تأمین‌کننده ثبت نشده است",
+                "safety_score": supplier_audit.safety_score if supplier_audit else 0.0,
+                "is_factory": supplier_audit.is_factory if supplier_audit else False,
+                "red_flags": supplier_audit.red_flags if supplier_audit else [],
+                "positive_signals": supplier_audit.positive_signals if supplier_audit else [],
+                "recommendations": supplier_audit.actionable_recommendations if supplier_audit else []
+            } if supplier_audit else None,
+            "regulations": {
+                "primary_hs_code": reg_assessment.primary_hs_code,
+                "candidate_hs_codes": [
+                    {
+                        "code": c.code,
+                        "description_fa": c.description_fa,
+                        "tariff_pct": c.base_tariff_pct,
+                        "benefit_pct": c.commercial_benefit_pct,
+                        "vat_pct": c.vat_pct,
+                        "priority_group": c.priority_group
+                    } for c in reg_assessment.candidate_hs_codes
+                ],
+                "mandatory_licenses": reg_assessment.mandatory_licenses,
+                "is_radio_equipment": reg_assessment.is_radio_equipment,
+                "is_medical_or_cosmetic": reg_assessment.is_medical_or_cosmetic,
+                "estimated_fx_queue_days": reg_assessment.estimated_fx_queue_days,
+                "warnings": reg_assessment.regulatory_warnings,
+                "steps": reg_assessment.compliance_steps
+            },
+            "opportunity_evaluation": {
+                "opportunity_score": opp_eval.opportunity_score,
+                "data_confidence_score": opp_eval.data_confidence_score,
+                "profitability_score": opp_eval.profitability_score,
+                "demand_velocity_score": opp_eval.demand_velocity_score,
+                "competition_score": opp_eval.competition_score,
+                "supplier_reliability_score": opp_eval.supplier_reliability_score,
+                "regulatory_risk_score": opp_eval.regulatory_risk_score,
+                "verdict": opp_eval.recommendation_verdict,
+                "risks": opp_eval.risk_summary,
+                "positives": opp_eval.positive_drivers
+            }
+        }
+
+        # 9. Persistence & Snapshots
+        snapshot_id = self.db.save_search_and_snapshot(
+            query=product_query,
+            category=cat,
+            report_dict=full_result,
+            rule_version=air_scenarios.rule_version if air_scenarios else "IR-CUSTOMS-1403"
+        )
+        full_result["snapshot_id"] = snapshot_id
+
+        # 10. Check triggered alerts
+        current_net_profit = float(air_scenarios.realistic.net_profit_unit_toman if (air_scenarios and air_scenarios.realistic) else 0.0)
+        triggered = self.alert_engine.check_alerts(product_query, current_net_profit)
+        full_result["triggered_alerts"] = triggered
+
+        return full_result
 
         # 8. Assemble full structured result
         full_result = {

@@ -1,13 +1,15 @@
 # 🇨🇳 ➡️ 🇮🇷 سامانه سازمانی آربیتراژ و تحلیل هوشمند واردات از چین به ایران
-### iTrade China Enterprise • Import Intelligence, Sourcing & Arbitrage Platform (v2.0)
+### iTrade China Enterprise • Import Intelligence, Sourcing & Arbitrage Platform (v2.1)
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
-[![Pytest 100%](https://img.shields.io/badge/tests-28%20passed%20(100%25)-success.svg)](TEST_REPORT.md)
+[![Pytest 100%](https://img.shields.io/badge/tests-34%20passed%20(100%25)-success.svg)](TEST_REPORT.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-ho3einalik%2Fchinatrade-181717.svg?logo=github)](https://github.com/ho3einalik/chinatrade)
 
-سامانه **iTrade China** یک پلتفرم جامع مهندسی، داده‌محور و تصمیم‌گیری تجاری برای **بازرگانان، شرکت‌های وارداتی و کارآفرینان ایرانی** است. این سامانه فرآیند پیچیده سورسینگ کالا از کارخانه‌های چین، تطبیق مشخصات فنی با محصولات بازار ایران، محاسبه بهای تمام‌شده گمرکی (Landed Cost)، مدل‌سازی سناریوهای سودآوری و ممیزی ریسک تأمین‌کنندگان را به صورت خودکار و مستند انجام می‌دهد.
+سامانه **iTrade China** یک پلتفرم جامع مهندسی، داده‌محور و تصمیم‌گیری تجاری برای **بازرگانان، شرکت‌های وارداتی و کارآفرینان ایرانی** است. این سامانه فرآیند پیچیده سورسینگ کالا از کارخانه‌های چین، تطبیق مشخصات فنی با محصولات بازار ایران، محاسبه بهای تمام‌شده گمرکی (Landed Cost)، مدل‌سازی سناریوهای سودآوری و ممیزی ریسک تأمین‌کنندگان را به صورت خودکار، مستند و بدون جعل داده انجام می‌دهد.
+
+> 🔒 **اصل بنیادین شفافیت داده‌ها:** سامانه هیچ قیمت، تأمین‌کننده، نرخ ارز، کرایه حمل یا سودی را بدون منبع مشخص و معتبر، به‌عنوان داده واقعی نمایش نمی‌دهد. در صورت عدم دسترسی به داده قطعی، سیستم با شفافیت کامل وضعیت «اطلاعات ناکافی (Insufficient Data)» اعلام نموده و از محاسبات حدسی خودداری می‌کند.
 
 ---
 

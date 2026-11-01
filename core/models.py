@@ -1,9 +1,39 @@
 """
 Pydantic Data models for China-to-Iran Import Intelligence & Arbitrage Agent.
+Includes strict data provenance, data types, freshness, Incoterms, and verification metadata.
 """
 
+from enum import Enum
 from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
+
+class DataType(str, Enum):
+    LIVE_API = "live_api"
+    LIVE_SCRAPE = "live_scrape"
+    MANUAL_QUOTE = "manual_quote"
+    CSV_IMPORT = "csv_import"
+    ESTIMATE = "estimate"
+    DEMO = "demo"
+
+class DataFreshness(str, Enum):
+    FRESH = "fresh"          # استعلام تازه (کمتر از ۲۴ ساعت)
+    STALE = "stale"          # قدیمی‌تر از آستانه استاندارد (نیازمند استعلام مجدد)
+    EXPIRED = "expired"      # منقضی‌شده و غیرقابل استناد
+    UNAVAILABLE = "unavailable" # در دسترس نیست
+
+class Incoterms(str, Enum):
+    EXW = "EXW"  # تحویل درب کارخانه در چین
+    FOB = "FOB"  # تحویل روی عرشه کشتی/فرودگاه در مبدأ چین
+    CIF = "CIF"  # تحویل با احتساب کرایه و بیمه تا گمرک مقصد ایران
+    DDP = "DDP"  # تحویل در انبار مقصد با ترخیص قطعی
+    UNKNOWN = "UNKNOWN"
+
+class VerificationStatus(str, Enum):
+    VERIFIED_WITH_DOCS = "verified_with_docs" # تأییدشده با مدارک رسمی و پیش‌فاکتور
+    UNVERIFIED = "unverified"                 # تأییدنشده (صرفاً پروفایل عمومی)
+    INCOMPLETE = "incomplete"                 # اطلاعات ناقص
+    WARNING = "warning"                       # دارای پرچم قرمز و هشدار ریسک
 
 class PriceTier(BaseModel):
     min_quantity: int = Field(..., description="حداقل تعداد برای این پله قیمتی")
@@ -12,43 +42,59 @@ class PriceTier(BaseModel):
 
 class ChineseSupplier(BaseModel):
     name: str = Field(..., description="نام کارخانه یا تامین‌کننده")
-    platform: str = Field(..., description="پلتفرم سورسینگ: 1688, EHSY, Gongchang, Makepolo, QiPeiRen, Alibaba, ChemNet, YiwuGo, Baidu B2B")
+    platform: str = Field(..., description="پلتفرم سورسینگ: 1688, EHSY, Gongchang, Makepolo, QiPeiRen, Alibaba, ChemNet, YiwuGo, Baidu B2B, Manual")
     product_title: str = Field(..., description="عنوان محصول در سایت چینی")
     product_specs: Dict[str, Any] = Field(default_factory=dict, description="مشخصات فنی و پکیجینگ")
     unit_price_cny: float = Field(..., description="پایین‌ترین یا مناسب‌ترین قیمت به یوان")
     unit_price_usd: Optional[float] = None
     price_tiers: List[PriceTier] = Field(default_factory=list, description="پلکان قیمت بر اساس تیراژ")
     moq: int = Field(default=1, description="حداقل تیراژ سفارش (MOQ)")
-    supplier_tier: str = Field(default="Verified Factory", description="رتبه و نشان اعتبار تامین‌کننده")
-    years_active: int = Field(default=3, description="سابقه فعالیت کارخانه به سال")
-    location: str = Field(default="Guangdong, China", description="شهر و استان محل استقرار کارخانه")
+    supplier_tier: str = Field(default="Unverified Profile", description="رتبه و نشان اعتبار تامین‌کننده")
+    years_active: int = Field(default=1, description="سابقه فعالیت کارخانه به سال")
+    location: str = Field(default="China", description="شهر و استان محل استقرار کارخانه")
     certifications: List[str] = Field(default_factory=list, description="گواهی‌های بین‌المللی: CE, RoHS, ISO9001")
     lead_time_days: int = Field(default=10, description="مدت زمان تولید و تحویل")
     weight_kg: float = Field(default=0.2, description="وزن ناخالص هر واحد (کیلوگرم)")
     volume_cbm: float = Field(default=0.001, description="حجم هر واحد (متر مکعب)")
-    source_url: str = Field(default="", description="لینک به صفحه کارخانه/محصول")
+    source_url: str = Field(default="", description="لینک به صفحه کارخانه/محصول یا پیش‌فاکتور")
+    
+    # --- Provenance & Data Quality Metadata ---
+    data_type: DataType = Field(default=DataType.MANUAL_QUOTE, description="نوع داده: live_api, manual_quote, csv_import, demo, estimate")
+    incoterms: Incoterms = Field(default=Incoterms.EXW, description="شرایط تحویل: EXW, FOB, CIF")
+    fetch_time_utc: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="زمان ثبت داده به UTC")
+    freshness: DataFreshness = Field(default=DataFreshness.FRESH, description="وضعیت تازگی داده")
+    verification_status: VerificationStatus = Field(default=VerificationStatus.UNVERIFIED, description="وضعیت اعتبارسنجی مدارک")
+    confidence_level: str = Field(default="UNVERIFIED", description="سطح اطمینان داده")
+    is_demo: bool = Field(default=False, description="آیا داده صرفاً نمونه آموزشی است")
+    notes: str = Field(default="", description="یادداشت‌های اصالت داده و منبع")
 
 class IranMarketChannel(BaseModel):
     name: str = Field(..., description="نام کانال فروش: دیجی‌کالا، ترب، ایمالز، باسلام، فروشگاه‌های تخصصی، دیوار")
-    price_toman: float = Field(..., description="قیمت تخمینی یا زنده در این کانال")
+    price_toman: Optional[float] = Field(default=None, description="قیمت در این کانال (در صورت نبود داده زنده یا دستی: None)")
     price_label: str = Field(default="", description="توضیح نوع قیمت: کف قیمت، تک‌فروشی، عمده")
     url: str = Field(default="", description="لینک جستجو یا کالا")
-    is_live: bool = Field(default=False, description="آیا استعلام زنده انجام شده است")
+    is_live: bool = Field(default=False, description="آیا استعلام زنده موفق از این کانال انجام شده است")
+    data_type: DataType = Field(default=DataType.ESTIMATE, description="نوع داده")
+    channel_type: str = Field(default="search_link", description="نوع کانال: live_api, search_link, manual_entry")
+    fetch_time_utc: Optional[str] = None
 
 class IranMarketPrice(BaseModel):
     platform: str = Field(..., description="پلتفرم ایرانی: ترب، دیجی‌کالا، ایمالز، باسلام، دیوار، بازار عمده")
     title_fa: str = Field(..., description="نام کالا در بازار ایران")
-    lowest_price_toman: float = Field(..., description="پایین‌ترین قیمت فروش در بازار (تومان)")
-    average_price_toman: float = Field(..., description="میانگین قیمت فروش (تومان)")
-    highest_price_toman: float = Field(..., description="بالاترین قیمت فروش (تومان)")
-    active_sellers_count: int = Field(default=1, description="تعداد فروشندگان فعال")
-    sales_velocity_score: int = Field(default=7, description="امتیاز تخمینی سرعت فروش و تقاضا از 10")
+    lowest_price_toman: Optional[float] = Field(default=None, description="پایین‌ترین قیمت فروش در بازار (تومان)")
+    average_price_toman: Optional[float] = Field(default=None, description="میانگین قیمت فروش (تومان)")
+    highest_price_toman: Optional[float] = Field(default=None, description="بالاترین قیمت فروش (تومان)")
+    active_sellers_count: int = Field(default=0, description="تعداد فروشندگان فعال")
+    sales_velocity_score: int = Field(default=5, description="امتیاز تخمینی سرعت فروش و تقاضا از 10")
     source_url: str = Field(default="", description="لینک به صفحه محصول در ترب یا دیجی‌کالا")
     channels: List[IranMarketChannel] = Field(default_factory=list, description="تفکیک قیمت در کانال‌های مختلف فروش ایران")
     sample_products: List[Dict[str, Any]] = Field(default_factory=list, description="نمونه کالاهای یافت‌شده در بازار")
+    status: str = Field(default="available", description="وضعیت داده: available, unavailable, no_results, insufficient_data")
+    data_type: DataType = Field(default=DataType.LIVE_API, description="نوع داده بازار ایران")
+    freshness: DataFreshness = Field(default=DataFreshness.FRESH, description="وضعیت تازگی داده")
+    fetch_time_utc: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="زمان دریافت داده")
 
 class LandedCostBreakdown(BaseModel):
-    # مقادیر به ازای هر واحد
     purchase_price_cny: float
     purchase_price_toman: float
     shipping_method: str = Field(default="Air Cargo", description="روش حمل: Air Cargo یا Sea Freight")
@@ -60,14 +106,12 @@ class LandedCostBreakdown(BaseModel):
     domestic_logistics_toman: float
     total_landed_cost_toman: float = Field(..., description="بهای تمام‌شده کل در انبار ایران (تومان)")
     
-    # تحلیل سودآوری در ایران
     target_selling_price_toman: float = Field(..., description="قیمت هدف فروش در ایران")
     net_profit_per_unit_toman: float = Field(..., description="سود خالص هر واحد")
     profit_margin_percent: float = Field(..., description="حاشیه سود خالص (درصد)")
     roi_percent: float = Field(..., description="نرخ بازگشت سرمایه (ROI %)")
     break_even_price_toman: float = Field(..., description="حداقل قیمت فروش بدون ضرر")
     
-    # برای کل بچ سفارش
     batch_quantity: int = Field(default=500, description="تعداد کل سفارش در این پارت")
     total_investment_toman: float = 0.0
     total_net_profit_toman: float = 0.0
@@ -87,5 +131,6 @@ class ImportOpportunityReport(BaseModel):
     air_cost_analysis: Optional[LandedCostBreakdown] = None
     sea_cost_analysis: Optional[LandedCostBreakdown] = None
     
-    opportunity_score: float = Field(default=8.5, description="امتیاز جذابیت فرصت واردات از 10")
+    opportunity_score: float = Field(default=5.0, description="امتیاز جذابیت فرصت تجاری از 10")
     recommendation_summary: str = Field(default="", description="خلاصه توصیه بازرگانی و استراتژی ورود")
+    insufficient_data: bool = Field(default=False, description="آیا داده‌های واقعی برای تحلیل کامل ناکافی است")

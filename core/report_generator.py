@@ -52,9 +52,12 @@ class ReportGenerator:
         md.append("### 🇮🇷 تحلیل بازار و رقبای داخلی در ایران (دیجی‌کالا، ترب، ایمالز، باسلام، فروشگاه‌های تخصصی و دیوار)")
         if market:
             md.append(f"- **پلتفرم‌های پایش‌شده:** {market.platform}")
-            md.append(f"- **کف قیمت بازار (ارزان‌ترین فروشگاه):** {market.lowest_price_toman:,.0f} تومان")
-            md.append(f"- **میانگین قیمت فروش فعلی:** {market.average_price_toman:,.0f} تومان")
-            md.append(f"- **سقف قیمت بازار:** {market.highest_price_toman:,.0f} تومان")
+            lowest_str = f"{market.lowest_price_toman:,.0f} تومان" if market.lowest_price_toman is not None else "نامشخص / بدون قیمت فعال"
+            avg_str = f"{market.average_price_toman:,.0f} تومان" if market.average_price_toman is not None else "نامشخص"
+            highest_str = f"{market.highest_price_toman:,.0f} تومان" if market.highest_price_toman is not None else "نامشخص"
+            md.append(f"- **کف قیمت بازار (ارزان‌ترین فروشگاه):** {lowest_str}")
+            md.append(f"- **میانگین قیمت فروش فعلی:** {avg_str}")
+            md.append(f"- **سقف قیمت بازار:** {highest_str}")
             md.append(f"- **تعداد فروشندگان فعال:** {market.active_sellers_count} فروشگاه")
             md.append(f"- **شاخص کشش تقاضا:** {market.sales_velocity_score} از ۱۰")
             
@@ -63,10 +66,12 @@ class ReportGenerator:
                 md.append("| کانال فروش | قیمت تخمینی (تومان) | وضعیت و نوع قیمت |")
                 md.append("| :--- | :--- | :--- |")
                 for ch in market.channels:
-                    md.append(f"| **{ch.name}** | {ch.price_toman:,.0f} تومان | {ch.price_label} |")
+                    ch_price = f"{ch.price_toman:,.0f} تومان" if ch.price_toman is not None else "نیاز به استعلام / لینک جستجو"
+                    md.append(f"| **{ch.name}** | {ch_price} | {ch.price_label} |")
                 md.append("")
             
-            md.append(f"- **لینک استعلام بازار:** [مشاهده در ترب]({market.source_url})")
+            if market.source_url:
+                md.append(f"- **لینک استعلام بازار:** [مشاهده در ترب/منبع]({market.source_url})")
         md.append("\n---\n")
 
         # کارخانه‌های شناسایی‌شده در چین
@@ -123,9 +128,9 @@ class ReportGenerator:
         sea_clearance = f"{(sea.clearance_and_brokerage_toman + sea.domestic_logistics_toman):,.0f}" if sea else "-"
         sea_batch_profit = f"{sea.total_net_profit_toman:,.0f}" if sea else "-"
 
-        market_avg = f"{market.average_price_toman:,.0f}" if market else "-"
-        market_low = f"{market.lowest_price_toman:,.0f}" if market else "-"
-        market_high = f"{market.highest_price_toman:,.0f}" if market else "-"
+        market_avg = f"{market.average_price_toman:,.0f}" if market and market.average_price_toman is not None else "-"
+        market_low = f"{market.lowest_price_toman:,.0f}" if market and market.lowest_price_toman is not None else "-"
+        market_high = f"{market.highest_price_toman:,.0f}" if market and market.highest_price_toman is not None else "-"
         market_sellers = market.active_sellers_count if market else 1
 
         html = f"""<!DOCTYPE html>

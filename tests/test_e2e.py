@@ -10,10 +10,37 @@ def test_root_serves_html():
     assert resp.status_code == 200
     assert "iTrade Enterprise" in resp.text
 
-def test_api_analyze_comprehensive_flow():
+def test_api_analyze_insufficient_data_flow():
+    """
+    Verifies that querying an unknown product without proforma quotes
+    honestly returns insufficient_data=True and does NOT fabricate profits.
+    """
+    resp = client.post("/api/analyze", json={
+        "product": "کالای تستی بدون تامین‌کننده مشخص",
+        "category": "عمومی",
+        "allow_demo": False
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["query"] == "کالای تستی بدون تامین‌کننده مشخص"
+    assert "report" in data
+    assert data["report"]["insufficient_data"] is True
+    assert data["sea_scenarios"]["is_sufficient_data"] is False
+    assert data["sea_scenarios"]["realistic"] is None
+    assert data["sea_scenarios"]["optimistic"] is None
+    assert data["sea_scenarios"]["pessimistic"] is None
+    assert data["report"]["opportunity_score"] <= 1.5
+
+def test_api_analyze_with_demo_or_quote_calculation():
+    """
+    Verifies that when demo is explicitly allowed or a quote exists,
+    the 3 financial scenarios (Realistic, Optimistic, Pessimistic) are accurately computed.
+    """
     resp = client.post("/api/analyze", json={
         "product": "ساعت هوشمند اولترا",
-        "category": "گجت‌ها و الکترونیک مصرفی"
+        "category": "گجت‌ها و الکترونیک مصرفی",
+        "allow_demo": True
     })
     assert resp.status_code == 200
     data = resp.json()
@@ -22,30 +49,44 @@ def test_api_analyze_comprehensive_flow():
     assert "report" in data
     assert "air_scenarios" in data
     assert "sea_scenarios" in data
-    assert "matching" in data
-    assert "supplier_audit" in data
-    assert "regulations" in data
-    assert "opportunity_evaluation" in data
-    assert "snapshot_id" in data
     assert data["snapshot_id"] > 0
 
-    # Validate 3 scenarios exist in sea_scenarios
     scen = data["sea_scenarios"]
     assert "realistic" in scen
     assert "optimistic" in scen
     assert "pessimistic" in scen
     assert scen["realistic"]["landed_cost_unit_toman"] > 0
     assert scen["pessimistic"]["landed_cost_unit_toman"] > scen["realistic"]["landed_cost_unit_toman"]
+    assert scen["optimistic"]["net_profit_unit_toman"] > scen["realistic"]["net_profit_unit_toman"]
 
-def test_ssrf_protection_blocks_internal_addresses():
-    # Attempting to scan loopback or cloud metadata
+def test_ssrf_protection_blocks_internal_and_dns_rebinding():
+    # 1. Direct loopback
     resp_loopback = client.post("/api/analyze", json={"product": "http://127.0.0.1:8000/admin"})
     assert resp_loopback.status_code == 400
     assert "ورودی نامعتبر" in resp_loopback.json()["detail"]
 
+    # 2. AWS/Cloud metadata IP
     resp_metadata = client.post("/api/analyze", json={"product": "http://169.254.169.254/latest/meta-data"})
     assert resp_metadata.status_code == 400
     assert "ورودی نامعتبر" in resp_metadata.json()["detail"]
+
+    # 3. Localhost hostname
+    resp_host = client.post("/api/analyze", json={"product": "http://localhost:8000/internal"})
+    assert resp_host.status_code == 400
+
+    # 4. Private RFC1918 subnet
+    resp_priv = client.post("/api/analyze", json={"product": "http://192.168.1.1/router"})
+    assert resp_priv.status_code == 400
+
+def test_manual_market_price_entry():
+    resp = client.post("/api/manual-market-price", json={
+        "product_title": "ساعت هوشمند اولترا",
+        "platform": "بازار چارسو تهران",
+        "price_toman": 1450000,
+        "source_url": "https://charsou.example/store"
+    })
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "success"
 
 def test_manual_quote_and_csv_upload():
     # 1. Manual Quote

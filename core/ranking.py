@@ -150,7 +150,11 @@ class OpportunityRankingEngine:
         confidence_score = round(min(conf_pts, 100.0), 1)
 
         # Formulate Investment Verdict
-        if opportunity_score >= 8.0 and confidence_score >= 70.0:
+        if net_margin_pct == 0.0 and roi_pct == 0.0 and iran_sample_count == 0:
+            verdict = "اطلاعات برای محاسبه سود کافی نیست (نیازمند استعلام زنده یا ثبت پیش‌فاکتور)"
+            opportunity_score = 0.0
+            confidence_score = 0.0
+        elif opportunity_score >= 8.0 and confidence_score >= 70.0:
             verdict = "فرصت طلایی واردات (اقدام به سفارش نمونه و استعلام PI قطعی)"
         elif opportunity_score >= 6.5:
             verdict = "فرصت با جذابیت خوب (نیازمند اعتبارسنجی نهایی نمونه و مذاکره قیمت)"

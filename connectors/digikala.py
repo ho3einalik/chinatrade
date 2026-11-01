@@ -86,13 +86,12 @@ class DigikalaConnector(BaseConnector):
             "products_count": len(cleaned_products),
             "products": cleaned_products,
             "statistics": {
-                "count": stats.count if stats else 0,
-                "min_toman": int(stats.min_value) if stats else 0,
-                "max_toman": int(stats.max_value) if stats else 0,
-                "median_toman": int(stats.median) if stats else 0,
-                "trimmed_mean_toman": int(stats.trimmed_mean) if stats else 0,
-                "iqr_toman": int(stats.iqr) if stats else 0,
-                "outliers_count": len(stats.outliers) if stats else 0
+                "count": stats.get("count", 0) if stats else 0,
+                "min_toman": int(stats.get("min") or 0) if stats else 0,
+                "max_toman": int(stats.get("max") or 0) if stats else 0,
+                "median_toman": int(stats.get("median") or 0) if stats else 0,
+                "trimmed_mean_toman": int(stats.get("trimmed_mean") or 0) if stats else 0,
+                "iqr_toman": int(stats.get("iqr") or 0) if stats else 0,
             } if stats else None,
             "notes": f"استعلام زنده موفق از دیجی‌کالا: {len(cleaned_products)} کالای دارای موجودی و قیمت"
         }

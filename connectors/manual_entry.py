@@ -9,7 +9,7 @@ import io
 import json
 from typing import List, Dict, Any, Union, Optional
 from pydantic import ValidationError
-from core.models import ChineseSupplier, PriceTier
+from core.models import ChineseSupplier, PriceTier, DataType, Incoterms, VerificationStatus, DataFreshness
 
 class ManualQuotationParser:
     @staticmethod
@@ -29,6 +29,14 @@ class ManualQuotationParser:
                         unit_price_usd=float(t.get("unit_price_usd")) if t.get("unit_price_usd") is not None else None
                     ))
 
+        incoterms_str = str(data.get("incoterms", "EXW")).upper()
+        try:
+            incoterms_val = Incoterms(incoterms_str)
+        except ValueError:
+            incoterms_val = Incoterms.EXW
+
+        data_type_val = DataType(data.get("data_type", "manual_quote")) if data.get("data_type") in DataType._value2member_map_ else DataType.MANUAL_QUOTE
+
         return ChineseSupplier(
             name=str(data.get("name") or data.get("supplier_name", "تأمین‌کننده دستی (ورودی کاربر)")).strip(),
             platform=str(data.get("platform", "Manual Proforma Invoice / WeChat")).strip(),
@@ -45,7 +53,13 @@ class ManualQuotationParser:
             lead_time_days=int(data.get("lead_time_days", 10)),
             weight_kg=float(data.get("weight_kg", 0.2)),
             volume_cbm=float(data.get("volume_cbm", 0.001)),
-            source_url=str(data.get("source_url", "")).strip()
+            source_url=str(data.get("source_url", "")).strip(),
+            data_type=data_type_val,
+            incoterms=incoterms_val,
+            verification_status=VerificationStatus.VERIFIED_WITH_DOCS,
+            freshness=DataFreshness.FRESH,
+            confidence_level="REAL_USER_PROFORMA",
+            is_demo=False
         )
 
     @classmethod
@@ -53,7 +67,7 @@ class ManualQuotationParser:
         """
         Parses CSV data containing supplier quotation records.
         Expected headers (case-insensitive):
-        name, platform, product_title, unit_price_cny, moq, weight_kg, volume_cbm, lead_time_days
+        name, platform, product_title, unit_price_cny, moq, weight_kg, volume_cbm, lead_time_days, incoterms
         """
         suppliers: List[ChineseSupplier] = []
         f = io.StringIO(csv_text.strip())
@@ -75,7 +89,9 @@ class ManualQuotationParser:
                     "volume_cbm": float(normalized_row.get("volume_cbm", 0.001)),
                     "lead_time_days": int(normalized_row.get("lead_time_days", 10)),
                     "location": normalized_row.get("location", "Guangdong, China"),
-                    "source_url": normalized_row.get("source_url", "")
+                    "source_url": normalized_row.get("source_url", ""),
+                    "incoterms": normalized_row.get("incoterms", "EXW"),
+                    "data_type": "csv_import"
                 })
                 suppliers.append(supp)
             except (ValueError, ValidationError) as e:

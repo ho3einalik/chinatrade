@@ -2,22 +2,23 @@
 Landed Cost and Arbitrage Calculator for importing goods from China to Iran.
 Implements exact Decimal-based monetary arithmetic, 3-scenario profit modeling
 (Optimistic, Realistic, Pessimistic), full line-item attribution, volumetric weight,
-dated regulatory rule versions, and break-even unit analysis.
+dated regulatory rule versions, Incoterms adjustments, and break-even unit analysis.
+
+قانون اصالت داده: در صورت نبود داده قیمت تأمین‌کننده یا قیمت بازار، به جای تولید اعداد فرضی،
+وضعیت insufficient_data اعلام می‌گردد.
 """
 
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
-from pydantic import BaseModel, Field
 
 from config import CONFIG, TradeConfig
-from core.money import Money, Currency
-from core.models import ChineseSupplier, LandedCostBreakdown
+from core.models import ChineseSupplier, LandedCostBreakdown, Incoterms
 
 # Regulatory & Tariff rule version metadata
 RULE_VERSION = "IR-CUSTOMS-1403-1404-V2"
 RULE_DATE = "2026-03"
-RULE_REFERENCE = "کتاب مقررات صادرات و واردات و مصوبات هیئت وزیران، احکام قانون بودجه ۱۴۰۳-۱۴۰۴"
+RULE_REFERENCE = "کتاب مقررات صادرات و واردات و احکام بودجه ۱۴۰۳-۱۴۰۴ (تخمینی تا زمان بررسی کتاب تعرفه قطعی کالا)"
 
 @dataclass
 class CostLineItem:
@@ -54,18 +55,42 @@ class ComprehensiveLandedCostResult:
     shipping_method: str
     chargeable_weight_kg: Decimal
     volume_cbm: Decimal
+    incoterms: str
+    is_sufficient_data: bool
+    data_notes: str
     
     # 3 Scenarios
-    realistic: ScenarioResult
-    optimistic: ScenarioResult
-    pessimistic: ScenarioResult
+    realistic: Optional[ScenarioResult]
+    optimistic: Optional[ScenarioResult]
+    pessimistic: Optional[ScenarioResult]
     
     # Sensitivity Summary
     fx_sensitivity_10pct_impact_toman: Decimal
     freight_sensitivity_20pct_impact_toman: Decimal
 
-    # Legacy compatibility helper
     def to_legacy_breakdown(self) -> LandedCostBreakdown:
+        if not self.is_sufficient_data or not self.realistic:
+            return LandedCostBreakdown(
+                purchase_price_cny=0.0,
+                purchase_price_toman=0.0,
+                shipping_method=self.shipping_method,
+                international_shipping_toman=0.0,
+                customs_duty_toman=0.0,
+                commercial_benefit_toman=0.0,
+                vat_toman=0.0,
+                clearance_and_brokerage_toman=0.0,
+                domestic_logistics_toman=0.0,
+                total_landed_cost_toman=0.0,
+                target_selling_price_toman=0.0,
+                net_profit_per_unit_toman=0.0,
+                profit_margin_percent=0.0,
+                roi_percent=0.0,
+                break_even_price_toman=0.0,
+                batch_quantity=self.batch_quantity,
+                total_investment_toman=0.0,
+                total_net_profit_toman=0.0
+            )
+
         r = self.realistic
         purchase_item = next((i for i in r.line_items if i.category == "origin"), None)
         freight_item = next((i for i in r.line_items if i.category == "freight"), None)
@@ -108,10 +133,6 @@ class ImportProfitCalculator:
 
     @staticmethod
     def calculate_volumetric_weight(length_cm: float, width_cm: float, height_cm: float, divisor: int = 5000) -> Decimal:
-        """
-        IATA Standard Volumetric Weight calculation.
-        Volumetric kg = (L * W * H in cm) / 5000 (standard air cargo)
-        """
         vol_cm3 = Decimal(str(length_cm)) * Decimal(str(width_cm)) * Decimal(str(height_cm))
         return (vol_cm3 / Decimal(str(divisor))).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
 
@@ -121,21 +142,14 @@ class ImportProfitCalculator:
         volume_cbm: float,
         shipping_method: str = "Air Cargo"
     ) -> Decimal:
-        """
-        Calculates chargeable billing weight:
-        - Air Cargo: max(actual_weight, volume_cbm * 167 kg/cbm (or 200 kg/cbm for express))
-        - Sea Freight (LCL): 1 CBM = 1000 kg ratio, with 1.0 CBM minimum per consignment
-        """
         act_kg = Decimal(str(max(actual_weight_kg, 0.01)))
         cbm = Decimal(str(max(volume_cbm, 0.0001)))
 
         method_lower = shipping_method.lower()
         if "sea" in method_lower or "دریایی" in method_lower:
-            # Sea LCL uses CBM primarily, but if weight > 1 ton per CBM, weight applies
             weight_cbm_equiv = act_kg / Decimal("1000")
             return max(cbm, weight_cbm_equiv)
         else:
-            # Air Cargo: 1 CBM = 167 kg
             volumetric_kg = (cbm * Decimal("167")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             return max(act_kg, volumetric_kg)
 
@@ -162,12 +176,10 @@ class ImportProfitCalculator:
         marketplace_fee_pct: Decimal,
         demurrage_reserve_toman: Decimal,
         scenario_type: str,
-        scenario_title_fa: str
+        scenario_title_fa: str,
+        incoterms: Optional[Incoterms] = None
     ) -> ScenarioResult:
-        """
-        Executes granular line-item cost attribution for a single scenario.
-        """
-        # 1. Unit purchase price in CNY
+        # 1. Determine unit purchase in CNY
         unit_cny = Decimal(str(supplier.unit_price_cny))
         if supplier.price_tiers:
             for tier in sorted(supplier.price_tiers, key=lambda x: x.min_quantity, reverse=True):
@@ -175,50 +187,58 @@ class ImportProfitCalculator:
                     unit_cny = Decimal(str(tier.unit_price_cny))
                     break
 
-        # Base purchase cost per unit in Toman
         unit_purchase_toman = (unit_cny * rmb_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        
-        # Currency remittance commission (صرافی و کارمزد حواله ارزی)
         remittance_toman = (unit_purchase_toman * (remittance_fee_pct / Decimal("100"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-        # Pre-shipment QC Inspection per unit
+        # Pre-shipment QC
         inspection_total_toman = inspection_usd * usd_rate
         inspection_unit_toman = (inspection_total_toman / Decimal(str(batch_qty))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-        # 2. International Freight
+        # 2. International Freight & Origin Handling (Respect Incoterms)
+        actual_incoterms = incoterms or (supplier.incoterms if hasattr(supplier, "incoterms") else Incoterms.EXW)
         is_sea = "sea" in shipping_method.lower() or "دریایی" in shipping_method.lower()
-        if is_sea:
-            cbm = Decimal(str(max(supplier.volume_cbm, 0.0005)))
-            freight_usd = cbm * sea_usd_per_cbm
-            unit_freight_toman = (freight_usd * usd_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        
+        # Origin handling for EXW terms (China domestic haulage + export customs)
+        if actual_incoterms == Incoterms.EXW:
+            unit_origin_handling_toman = (unit_purchase_toman * Decimal("0.02")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         else:
-            chargeable_kg = self.calculate_chargeable_weight(supplier.weight_kg, supplier.volume_cbm, shipping_method)
-            freight_usd = chargeable_kg * air_usd_per_kg
-            unit_freight_toman = (freight_usd * usd_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            unit_origin_handling_toman = Decimal("0")
 
-        # 3. Marine / Cargo Insurance (بیمه باربری - عرف گمرکی 0.5% ارزش کالا + کرایه)
-        c_and_f_toman = unit_purchase_toman + unit_freight_toman
-        unit_insurance_toman = (c_and_f_toman * Decimal("0.005")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        if actual_incoterms == Incoterms.CIF:
+            # CIF already includes international freight and insurance
+            unit_freight_toman = Decimal("0")
+            unit_insurance_toman = Decimal("0")
+            c_and_f_toman = unit_purchase_toman
+            cif_toman = unit_purchase_toman
+        else:
+            if is_sea:
+                cbm = Decimal(str(max(supplier.volume_cbm, 0.0005)))
+                freight_usd = cbm * sea_usd_per_cbm
+                unit_freight_toman = (freight_usd * usd_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            else:
+                chargeable_kg = self.calculate_chargeable_weight(supplier.weight_kg, supplier.volume_cbm, shipping_method)
+                freight_usd = chargeable_kg * air_usd_per_kg
+                unit_freight_toman = (freight_usd * usd_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-        # CIF Value base for customs
-        cif_toman = c_and_f_toman + unit_insurance_toman
+            c_and_f_toman = unit_purchase_toman + unit_origin_handling_toman + unit_freight_toman
+            unit_insurance_toman = (c_and_f_toman * Decimal("0.005")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            cif_toman = c_and_f_toman + unit_insurance_toman
 
-        # 4. Customs Duty & Commercial Benefit (حقوق ورودی و سود بازرگانی)
+        # 3. Customs Duties & Taxes
         unit_customs_duty_toman = (cif_toman * (tariff_pct / Decimal("100"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         unit_commercial_benefit_toman = (cif_toman * (benefit_pct / Decimal("100"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-        # 5. Value Added Tax (VAT 10% on CIF + Duties)
         taxable_base = cif_toman + unit_customs_duty_toman + unit_commercial_benefit_toman
         unit_vat_toman = (taxable_base * (vat_pct / Decimal("100"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-        # 6. Clearance Brokerage, Demurrage & Destination Logistics
+        # 4. Clearance, Demurrage & Destination Logistics
         unit_brokerage_toman = (cif_toman * (brokerage_pct / Decimal("100"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         unit_demurrage_toman = (demurrage_reserve_toman / Decimal(str(batch_qty))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         unit_dest_logistics_toman = (cif_toman * (domestic_logistics_pct / Decimal("100"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-        # Direct Operational Landed Cost Subtotal
         direct_landed_cost_toman = (
             unit_purchase_toman
+            + unit_origin_handling_toman
             + remittance_toman
             + inspection_unit_toman
             + unit_freight_toman
@@ -231,20 +251,15 @@ class ImportProfitCalculator:
             + unit_dest_logistics_toman
         )
 
-        # 7. Financing / Cost of Capital (خواب سرمایه در طول پروسه سفارش تا ترخیص و فروش)
+        # 5. Financing & Risk
         monthly_capital_rate = (annual_cost_of_capital_pct / Decimal("100")) / Decimal("12")
         unit_financing_cost_toman = (direct_landed_cost_toman * monthly_capital_rate * Decimal(str(financing_months))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-
-        # 8. Defect, Scrap & Warranty Reserve (ذخیره خرابی و مرجوعی)
         unit_scrap_reserve_toman = (direct_landed_cost_toman * (defect_scrap_rate_pct / Decimal("100"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-        # Total Complete Landed Cost per unit
         total_landed_cost_toman = direct_landed_cost_toman + unit_financing_cost_toman + unit_scrap_reserve_toman
 
-        # 9. Marketplace sales commission / distribution cost
+        # 6. Sales Commission & Net Profit
         unit_sales_commission_toman = (target_iran_price_toman * (marketplace_fee_pct / Decimal("100"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-
-        # 10. Net Profit and Financial Ratios
         effective_net_revenue_unit = target_iran_price_toman - unit_sales_commission_toman
         net_profit_unit_toman = effective_net_revenue_unit - total_landed_cost_toman
 
@@ -256,29 +271,26 @@ class ImportProfitCalculator:
         if total_landed_cost_toman > Decimal("0"):
             markup_percent = ((net_profit_unit_toman / total_landed_cost_toman) * Decimal("100")).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
 
-        roi_percent = markup_percent  # ROI on landed inventory investment
+        roi_percent = markup_percent
 
-        # Break-even price (including sales commission)
-        # Price * (1 - marketplace_fee_pct) = total_landed_cost
         comm_ratio = Decimal("1") - (marketplace_fee_pct / Decimal("100"))
         break_even_price_toman = (total_landed_cost_toman / comm_ratio).quantize(Decimal("1"), rounding=ROUND_HALF_UP) if comm_ratio > Decimal("0") else total_landed_cost_toman
 
         total_investment_toman = total_landed_cost_toman * Decimal(str(batch_qty))
         total_net_profit_toman = net_profit_unit_toman * Decimal(str(batch_qty))
 
-        # Break-even units (units required to cover fixed order inspection & clearance minimums)
         fixed_batch_overhead = inspection_total_toman + demurrage_reserve_toman
-        contribution_margin_per_unit = effective_net_revenue_unit - (unit_purchase_toman + remittance_toman + unit_freight_toman + unit_customs_duty_toman + unit_commercial_benefit_toman + unit_vat_toman)
+        contribution_margin_per_unit = effective_net_revenue_unit - (unit_purchase_toman + unit_origin_handling_toman + remittance_toman + unit_freight_toman + unit_customs_duty_toman + unit_commercial_benefit_toman + unit_vat_toman)
         if contribution_margin_per_unit > Decimal("0"):
             break_even_units = int((fixed_batch_overhead / contribution_margin_per_unit).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
             break_even_units = max(1, min(break_even_units, batch_qty))
         else:
             break_even_units = batch_qty
 
-        # Line items breakdown
         tot = total_landed_cost_toman if total_landed_cost_toman > Decimal("0") else Decimal("1")
         line_items = [
             CostLineItem("origin", "خرید کالا از کارخانه چین", "purchase_price", unit_purchase_toman, ((unit_purchase_toman / tot) * Decimal("100")).quantize(Decimal("0.1"))),
+            CostLineItem("origin", "حمل مبدأ و ترخیص صادراتی چین (EXW)", "china_origin_handling", unit_origin_handling_toman, ((unit_origin_handling_toman / tot) * Decimal("100")).quantize(Decimal("0.1"))),
             CostLineItem("origin", "کارمزد صرافی و حواله ارزی", "remittance_fee", remittance_toman, ((remittance_toman / tot) * Decimal("100")).quantize(Decimal("0.1"))),
             CostLineItem("origin", "بازرسی کالا قبل از بارگیری (QC)", "inspection_fee", inspection_unit_toman, ((inspection_unit_toman / tot) * Decimal("100")).quantize(Decimal("0.1"))),
             CostLineItem("freight", "کرایه حمل بین‌المللی", "international_freight", unit_freight_toman, ((unit_freight_toman / tot) * Decimal("100")).quantize(Decimal("0.1"))),
@@ -313,9 +325,10 @@ class ImportProfitCalculator:
 
     def calculate_landed_cost_scenarios(
         self,
-        supplier: ChineseSupplier,
-        target_iran_price_toman: float,
+        supplier: Optional[ChineseSupplier],
+        target_iran_price_toman: Optional[float],
         shipping_method: str = "Air Cargo",
+        incoterms: Optional[Incoterms] = None,
         customs_tariff_pct: Optional[float] = None,
         commercial_benefit_pct: Optional[float] = None,
         batch_quantity: Optional[int] = None,
@@ -324,11 +337,30 @@ class ImportProfitCalculator:
         marketplace_fee_pct: float = 4.0
     ) -> ComprehensiveLandedCostResult:
         """
-        Runs complete 3-scenario calculation:
-        1. Realistic: Baseline market FX, standard shipping, standard customs duties.
-        2. Optimistic: 5% lower FX, lower clearance time (2 months), 1% defect, 5% higher selling price.
-        3. Pessimistic: 12% higher FX, 20% higher shipping, 4 months financing, 4% defect, 8% lower selling price, additional demurrage.
+        Runs complete 3-scenario calculation.
+        اگر تأمین‌کننده یا قیمت بازار موجود نباشد، وضعیت is_sufficient_data=False برمی‌گرداند.
         """
+        effective_incoterms = incoterms or (supplier.incoterms if supplier and hasattr(supplier, "incoterms") else Incoterms.EXW)
+
+        # شرط اصالت داده: در صورت عدم وجود داده، از تولید سود ساختگی جلوگیری می‌شود
+        if not supplier or target_iran_price_toman is None or target_iran_price_toman <= 0 or supplier.unit_price_cny <= 0:
+            return ComprehensiveLandedCostResult(
+                rule_version=self.rule_version,
+                rule_date=self.rule_date,
+                batch_quantity=batch_quantity or 100,
+                shipping_method=shipping_method,
+                chargeable_weight_kg=Decimal("0"),
+                volume_cbm=Decimal("0"),
+                incoterms=effective_incoterms.value if hasattr(effective_incoterms, "value") else str(effective_incoterms),
+                is_sufficient_data=False,
+                data_notes="داده‌های لازم (قیمت تأمین‌کننده یا قیمت فروش در ایران) ناکافی است. هیچ سود یا هزینه‌ای محاسبه نشد.",
+                realistic=None,
+                optimistic=None,
+                pessimistic=None,
+                fx_sensitivity_10pct_impact_toman=Decimal("0"),
+                freight_sensitivity_20pct_impact_toman=Decimal("0")
+            )
+
         qty = batch_quantity if batch_quantity is not None else max(supplier.moq, 100)
         target_price = Decimal(str(round(target_iran_price_toman)))
         
@@ -341,11 +373,10 @@ class ImportProfitCalculator:
         vat = Decimal(str(self.config.VAT_PERCENT))
         brokerage = Decimal(str(self.config.CLEARANCE_BROKERAGE_PERCENT))
         logistics = Decimal(str(self.config.DOMESTIC_LOGISTICS_PERCENT))
-        remittance = Decimal("1.5") # 1.5% remittance commission
-        inspection_usd = Decimal("150") # $150 batch QC inspection
-        cost_of_capital = Decimal("24.0") # 24% annual capital cost in Iran
-        
-        # 1. Realistic Scenario
+        remittance = Decimal("1.5")
+        inspection_usd = Decimal("150")
+        cost_of_capital = Decimal("24.0")
+
         realistic = self.compute_single_scenario(
             supplier=supplier,
             target_iran_price_toman=target_price,
@@ -366,12 +397,12 @@ class ImportProfitCalculator:
             annual_cost_of_capital_pct=cost_of_capital,
             defect_scrap_rate_pct=Decimal(str(defect_scrap_rate_pct)),
             marketplace_fee_pct=Decimal(str(marketplace_fee_pct)),
-            demurrage_reserve_toman=Decimal("5000000"), # 5M Toman reserve
+            demurrage_reserve_toman=Decimal("5000000"),
             scenario_type="realistic",
-            scenario_title_fa="حالت واقع‌بینانه (Realistic)"
+            scenario_title_fa="حالت واقع‌بینانه (Realistic)",
+            incoterms=effective_incoterms
         )
 
-        # 2. Optimistic Scenario (5% lower FX, faster clearance, higher market price)
         opt_usd = (base_usd * Decimal("0.96")).quantize(Decimal("1"))
         opt_rmb = (base_rmb * Decimal("0.96")).quantize(Decimal("1"))
         opt_price = (target_price * Decimal("1.05")).quantize(Decimal("1"))
@@ -397,10 +428,10 @@ class ImportProfitCalculator:
             marketplace_fee_pct=Decimal(str(marketplace_fee_pct)),
             demurrage_reserve_toman=Decimal("2000000"),
             scenario_type="optimistic",
-            scenario_title_fa="حالت خوش‌بینانه (Optimistic)"
+            scenario_title_fa="حالت خوش‌بینانه (Optimistic)",
+            incoterms=effective_incoterms
         )
 
-        # 3. Pessimistic Scenario (10% FX spike, 20% freight jump, delayed clearance, 8% price drop)
         pess_usd = (base_usd * Decimal("1.10")).quantize(Decimal("1"))
         pess_rmb = (base_rmb * Decimal("1.10")).quantize(Decimal("1"))
         pess_price = (target_price * Decimal("0.92")).quantize(Decimal("1"))
@@ -424,15 +455,14 @@ class ImportProfitCalculator:
             annual_cost_of_capital_pct=cost_of_capital,
             defect_scrap_rate_pct=Decimal("4.0"),
             marketplace_fee_pct=Decimal(str(marketplace_fee_pct)),
-            demurrage_reserve_toman=Decimal("15000000"), # 15M Toman demurrage
+            demurrage_reserve_toman=Decimal("15000000"),
             scenario_type="pessimistic",
-            scenario_title_fa="حالت بدبینانه (Pessimistic)"
+            scenario_title_fa="حالت بدبینانه (Pessimistic)",
+            incoterms=effective_incoterms
         )
 
-        # Sensitivity metrics
         fx_impact = (realistic.landed_cost_unit_toman * Decimal("0.085")).quantize(Decimal("1"))
         freight_impact = (realistic.line_items[3].amount_toman * Decimal("0.20")).quantize(Decimal("1"))
-
         chargeable_kg = self.calculate_chargeable_weight(supplier.weight_kg, supplier.volume_cbm, shipping_method)
         cbm = Decimal(str(supplier.volume_cbm)).quantize(Decimal("0.0001"))
 
@@ -443,6 +473,9 @@ class ImportProfitCalculator:
             shipping_method=shipping_method,
             chargeable_weight_kg=chargeable_kg,
             volume_cbm=cbm,
+            incoterms=effective_incoterms.value if hasattr(effective_incoterms, "value") else str(effective_incoterms),
+            is_sufficient_data=True,
+            data_notes="محاسبه کامل بر مبنای قیمت واقعی و نرخ‌های پیکربندی‌شده",
             realistic=realistic,
             optimistic=optimistic,
             pessimistic=pessimistic,
@@ -452,14 +485,13 @@ class ImportProfitCalculator:
 
     def calculate_landed_cost(
         self,
-        supplier: ChineseSupplier,
-        target_iran_price_toman: float,
+        supplier: Optional[ChineseSupplier],
+        target_iran_price_toman: Optional[float],
         shipping_method: str = "Air Cargo",
         customs_tariff_pct: Optional[float] = None,
         commercial_benefit_pct: Optional[float] = None,
         batch_quantity: Optional[int] = None,
     ) -> LandedCostBreakdown:
-        """Legacy-compatible interface returning LandedCostBreakdown based on Realistic Scenario."""
         comp = self.calculate_landed_cost_scenarios(
             supplier=supplier,
             target_iran_price_toman=target_iran_price_toman,

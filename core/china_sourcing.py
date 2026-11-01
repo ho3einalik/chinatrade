@@ -1,78 +1,97 @@
 """
 China Multi-Source Sourcing Engine.
 Integrates verified factory networks and B2B wholesale platforms:
-- 1688.com (بزرگ‌ترین پلتفرم عمده‌فروشی داخلی چین با کمترین قیمت کارخانه)
-- EHSY (西域 - www.ehsy.com) (تجهیزات صنعتی، MRO کارخانه‌ای، ابزارآلات و قطعات مکانیکی)
-- Gongchang (中国工厂网 - www.gongchang.com) (شبکه مستقیم کارخانه‌ها و تولیدی‌های چین)
-- Makepolo (马可波罗 - www.makepolo.com) (موتور جستجوی خریدهای عمده صنعتی و تدارکاتی B2B)
-- QiPeiRen (汽配人 - www.qipeiren.com) (مرجع شماره ۱ قطعات خودرو و ماشین‌آلات چین)
-- YiwuGo (义乌购 - www.yiwugo.com) (پلتفرم رسمی بازار بین‌المللی کالاهای خرد و خانگی ایوو)
-- Baidu Aicai (百度爱采购 - b2b.baidu.com) (پلتفرم B2B رسمی موتور جستجوی بایدو چین)
-- ChemNet (china.chemnet.com) (مرجع جهانی پتروشیمی، پلیمرها و مواد شیمیایی)
-- Alibaba.com & Made-in-China.com (صادرات بین‌المللی و کارخانه‌های OEM)
+- 1688.com (بزرگ‌ترین پلتفرم عمده‌فروشی داخلی چین)
+- EHSY (西域 - www.ehsy.com) (تجهیزات صنعتی و MRO کارخانه‌ای)
+- Gongchang (中国工厂网 - www.gongchang.com) (دایرکتوری مستقیم کارخانه‌ها)
+- Makepolo (马可波罗 - www.makepolo.com) (موتور جستجوی خریدهای عمده B2B)
+- YiwuGo (义乌购 - www.yiwugo.com) (بازار بین‌المللی کالاهای خرد ایوو)
+- Baidu Aicai (百度爱采购 - b2b.baidu.com) (پلتفرم B2B رسمی بایدو)
+- ChemNet (china.chemnet.com) (مرجع جهانی پتروشیمی و پلیمرها)
+- QiPeiRen (汽配人 - www.qipeiren.com) (قطعات خودرو - نیازمند پروکسی چین)
+
+قانون اصالت داده: هیچ تأمین‌کننده یا قیمت ساختگی در حالت عادی برنامه تولید نمی‌شود.
+در صورت نبود پیش‌فاکتور یا نتیجه زنده، فهرست تأمین‌کنندگان خالی بازگردانده شده و لینک‌های مستقیم جستجو ارائه می‌گردد.
 """
 
 from typing import List, Dict, Any, Optional
 import urllib.parse
 from config import CONFIG
-from core.models import ChineseSupplier, PriceTier
+from core.models import ChineseSupplier, PriceTier, DataType, DataFreshness, Incoterms, VerificationStatus
 
 class ChinaSourcingEngine:
-    def __init__(self):
+    def __init__(self, db=None):
+        self.db = db
         self.platform_catalog = {
             "ehsy": {
                 "name": "EHSY (西域)",
                 "url": "https://www.ehsy.com/",
+                "search_template": "https://www.ehsy.com/search?keyword={query}",
                 "specialty": "ابزارآلات، تجهیزات MRO کارخانه‌ای، ابزار دقیق، ایمنی، اتوماسیون و قطعات صنعتی",
-                "status": "Verified & Active (HTTP 200)"
+                "status": "Verified & Active (HTTP 200)",
+                "requires_auth": True
             },
             "gongchang": {
                 "name": "Gongchang (中国工厂网)",
                 "url": "https://www.gongchang.com/",
+                "search_template": "https://www.gongchang.com/search?q={query}",
                 "specialty": "دایرکتوری مستقیم کارخانه‌ها و تولیدی‌های معتبر چین برای تولید OEM/ODM",
-                "status": "Verified & Active (HTTP 200)"
+                "status": "Verified & Active (HTTP 200)",
+                "requires_auth": False
             },
             "makepolo": {
                 "name": "Makepolo (马可波罗)",
                 "url": "https://www.makepolo.com/",
+                "search_template": "https://search.makepolo.com/index.php?q={query}",
                 "specialty": "موتور جستجوی تامین‌کنندگان و خرید عمده B2B در صنایع مختلف",
-                "status": "Verified & Active (HTTP 200)"
-            },
-            "qipeiren": {
-                "name": "QiPeiRen (汽配人)",
-                "url": "https://www.qipeiren.com/",
-                "specialty": "پلتفرم تخصصی B2B قطعات یدکی خودرو، ماشین‌آلات سنگین و لوازم خودرویی",
-                "status": "Active in China (نیاز به وی‌چت / شبکه چین)"
-            },
-            "yiwugo": {
-                "name": "YiwuGo (义乌购)",
-                "url": "https://www.yiwugo.com/",
-                "specialty": "بازار بزرگ بین‌المللی ایوو؛ کالای خرد، لوازم خانگی و آشپزخانه، اسباب‌بازی و دکوراسیون",
-                "status": "Verified & Active (HTTP 200)"
-            },
-            "baidu_b2b": {
-                "name": "Baidu Aicai (百度爱采购)",
-                "url": "https://b2b.baidu.com/",
-                "specialty": "پلتفرم رسمی هوش تجاری و خرید B2B بایدو برای اتصال مستقیم به کارخانجات چین",
-                "status": "Verified & Active (HTTP 200)"
-            },
-            "chemnet": {
-                "name": "ChemNet (中国化工网)",
-                "url": "http://china.chemnet.com/",
-                "specialty": "پتروشیمی، پلیمرهای مهندسی، رزین‌ها، روغن‌ها، اسیدها و مواد شیمیایی دارویی",
-                "status": "Verified & Active (HTTP 200)"
+                "status": "Verified & Active (HTTP 200)",
+                "requires_auth": False
             },
             "1688": {
                 "name": "1688.com (Alibaba Domestic)",
                 "url": "https://www.1688.com/",
+                "search_template": "https://s.1688.com/selloffer/offer_search.htm?keywords={query}",
                 "specialty": "بزرگ‌ترین پلتفرم عمده‌فروشی چین با قیمت‌های فاکتور داخلی بدون کارمزد دلاری",
-                "status": "Verified & Active"
+                "status": "Manual Search Link (ضدربات علی‌بابا فعال است)",
+                "requires_auth": True
+            },
+            "yiwugo": {
+                "name": "YiwuGo (义乌购)",
+                "url": "https://www.yiwugo.com/",
+                "search_template": "https://www.yiwugo.com/search/s.html?q={query}",
+                "specialty": "بازار بزرگ بین‌المللی ایوو؛ کالای خرد، لوازم خانگی و آشپزخانه، اسباب‌بازی و دکوراسیون",
+                "status": "Verified & Active (HTTP 200)",
+                "requires_auth": False
+            },
+            "baidu_b2b": {
+                "name": "Baidu Aicai (百度爱采购)",
+                "url": "https://b2b.baidu.com/",
+                "search_template": "https://b2b.baidu.com/s?q={query}",
+                "specialty": "پلتفرم رسمی هوش تجاری و خرید B2B بایدو برای اتصال مستقیم به کارخانجات چین",
+                "status": "Verified & Active (HTTP 200)",
+                "requires_auth": False
+            },
+            "chemnet": {
+                "name": "ChemNet (中国化工网)",
+                "url": "http://china.chemnet.com/",
+                "search_template": "http://china.chemnet.com/search/product/{query}",
+                "specialty": "پتروشیمی، پلیمرهای مهندسی، رزین‌ها، روغن‌ها، اسیدها و مواد شیمیایی دارویی",
+                "status": "Verified & Active (HTTP 200)",
+                "requires_auth": False
+            },
+            "qipeiren": {
+                "name": "QiPeiRen (汽配人)",
+                "url": "https://www.qipeiren.com/",
+                "search_template": "https://www.qipeiren.com/search?q={query}",
+                "specialty": "پلتفرم تخصصی B2B قطعات یدکی خودرو و ماشین‌آلات",
+                "status": "Blocked by Great Firewall (نیازمند شبکه چین / اکانت وی‌چت)",
+                "requires_auth": True
             }
         }
 
     def translate_to_chinese_keywords(self, query: str) -> str:
         """
-        تبدیل کلیدواژه‌های فارسی/انگلیسی به اصطلاحات تخصصی بازرگانی چینی (1688 / EHSY / Gongchang / Makepolo)
+        تبدیل کلیدواژه‌های فارسی/انگلیسی به اصطلاحات تخصصی بازرگانی چینی جهت جستجوی مستقیم
         """
         dict_map = {
             "ساعت هوشمند": "智能手表 AMOLED 蓝牙通话",
@@ -114,423 +133,90 @@ class ChinaSourcingEngine:
                 return v
         return query
 
-    def search_suppliers(self, query: str, category: Optional[str] = None) -> List[ChineseSupplier]:
-        """
-        جستجوی چندمنبعی تامین‌کنندگان در تمامی پلتفرم‌های تاییدشده چین
-        """
+    def get_search_links(self, query: str) -> Dict[str, Dict[str, Any]]:
+        """تولید لینک‌های عمیق جستجوی مستقیم در تمام پلتفرم‌های چین"""
         cn_keyword = self.translate_to_chinese_keywords(query)
-        q_lower = query.lower()
+        encoded_kw = urllib.parse.quote(cn_keyword)
+        links = {}
+        for key, p in self.platform_catalog.items():
+            links[key] = {
+                "name": p["name"],
+                "url": p["search_template"].format(query=encoded_kw),
+                "specialty": p["specialty"],
+                "status": p["status"],
+                "requires_auth": p["requires_auth"]
+            }
+        return links
 
-        # تشخیص هوشمند صنعتی
-        is_chemical = any(w in q_lower for w in ["pvc", "hdpe", "pp", "pet", "پلیمر", "پتروشیمی", "رزین", "روغن", "شیمیایی", "گرانول"])
-        is_autoparts = any(w in q_lower for w in ["خودرو", "ماشین", "لنت", "شمع", "فیلتر", "دیسک", "لاستیک", "یدکی", "کمک فنر", "تسمه", "چراغ"])
-        is_industrial_tool = any(w in q_lower for w in ["دریل", "ابزار", "پیچ گوشتی", "دستگاه", "موتور", "پمپ", "بلبرینگ", "جوش", "فرز", "اینورتر"])
-        is_gadget = any(w in q_lower for w in ["ساعت", "واچ", "watch", "ایرپاد", "هندزفری", "اسپیکر", "شارژر", "دوربین", "ماساژور", "پاوربانک", "هدفون"])
+    def search_suppliers(
+        self,
+        query: str,
+        category: Optional[str] = None,
+        allow_demo: bool = False
+    ) -> List[ChineseSupplier]:
+        """
+        سورسینگ تأمین‌کنندگان چین:
+        ۱. بررسی پیش‌فاکتورها و رکوردهای واقعی ثبت‌شده در پایگاه داده SQLite
+        ۲. در صورت نبود داده واقعی:
+           - اگر allow_demo=False باشد (پیش‌فرض محیط تولید)، لیست خالی برمی‌گرداند.
+           - اگر allow_demo=True باشد، صرفاً برای تست توسعه نمونه آموزشی با برچسب صریح DEMO تولید می‌شود.
+        """
+        real_suppliers: List[ChineseSupplier] = []
 
-        if is_chemical:
-            return self._generate_chemical_suppliers(query, cn_keyword)
-        elif is_autoparts:
-            return self._generate_autoparts_suppliers(query, cn_keyword)
-        elif is_industrial_tool:
-            return self._generate_tool_mro_suppliers(query, cn_keyword)
-        elif is_gadget:
-            return self._generate_gadget_suppliers(query, cn_keyword)
-        else:
-            return self._generate_general_suppliers(query, cn_keyword)
+        # ۱. استخراج پیش‌فاکتورها و داده‌های واقعی واردشده توسط کاربر در دیتابیس
+        if self.db:
+            try:
+                db_quotes = self.db.get_supplier_quotes_for_query(query)
+                for q in db_quotes:
+                    real_suppliers.append(ChineseSupplier(
+                        name=q["supplier_name"],
+                        platform=q["platform"],
+                        product_title=q["product_title"],
+                        unit_price_cny=float(q["unit_price_cny"]),
+                        moq=int(q["moq"]),
+                        supplier_tier="Manual Verified Quote",
+                        source_url=q.get("source_url", ""),
+                        data_type=DataType.MANUAL_QUOTE if q.get("is_manual") else DataType.CSV_IMPORT,
+                        incoterms=Incoterms(q.get("incoterms", "EXW")),
+                        verification_status=VerificationStatus.VERIFIED_WITH_DOCS,
+                        confidence_level="REAL_USER_PROFORMA",
+                        is_demo=False,
+                        notes="ثبت‌شده در پیش‌فاکتورهای کاربر"
+                    ))
+            except Exception as e:
+                pass
 
-    def _generate_chemical_suppliers(self, query: str, cn_kw: str) -> List[ChineseSupplier]:
-        """سورسینگ مواد پتروشیمی و پلیمری (ChemNet, Gongchang, Makepolo, 1688)"""
+        if real_suppliers:
+            return real_suppliers
+
+        # ۲. در صورت نبود داده واقعی:
+        if not allow_demo:
+            # عدم تولید دیتای فرضی در پروداکشن
+            return []
+
+        # ۳. فقط در صورت درخواست صریح حالت Demo برای محیط توسعه
+        cn_keyword = self.translate_to_chinese_keywords(query)
+        return self._generate_demo_suppliers_with_explicit_label(query, cn_keyword)
+
+    def _generate_demo_suppliers_with_explicit_label(self, query: str, cn_kw: str) -> List[ChineseSupplier]:
+        """
+        تولید داده صرفاً آموزشی (Demo) که با برچسب مشخص و غیرقابل استناد نشاندار شده است.
+        """
         return [
             ChineseSupplier(
-                name="Shandong Haihua Chemical Group Co., Ltd.",
-                platform="ChemNet & Gongchang (中国工厂网)",
-                product_title=f"{query.upper()} Prime Virgin Grade - {cn_kw}",
-                product_specs={
-                    "Grade": "Virgin Industrial Grade A (Purity ≥ 99.5%)",
-                    "Packaging": "25kg valve bags / 1000kg Jumbo Bags on pallets",
-                    "Certificates": "COA, MSDS, ISO9001, REACH",
-                    "Origin": "Weifang Chemical Industrial Park, Shandong"
-                },
-                unit_price_cny=6.8,
-                unit_price_usd=0.96,
-                price_tiers=[
-                    PriceTier(min_quantity=1000, unit_price_cny=7.2, unit_price_usd=1.02),
-                    PriceTier(min_quantity=5000, unit_price_cny=6.8, unit_price_usd=0.96),
-                    PriceTier(min_quantity=20000, unit_price_cny=6.4, unit_price_usd=0.90),
-                ],
-                moq=1000,
-                supplier_tier="Top 500 Chemical Manufacturer in China",
-                years_active=19,
-                location="Weifang, Shandong Province, China",
-                certifications=["ISO9001", "ISO14001", "REACH", "SGS Tested"],
-                lead_time_days=7,
-                weight_kg=1.0,
-                volume_cbm=0.0018,
-                source_url="http://china.chemnet.com/"
-            ),
-            ChineseSupplier(
-                name="Zhejiang Petrochemical Raw Material Corp.",
-                platform="1688.com & Makepolo (马可波罗)",
-                product_title=f"Prime Grade {query} Bulk Factory Supply",
-                product_specs={
-                    "Melt Index": "Standard Extrusion & Injection Grade",
-                    "Packaging": "25kg standard export moisture-proof bags"
-                },
-                unit_price_cny=6.5,
-                unit_price_usd=0.92,
-                price_tiers=[
-                    PriceTier(min_quantity=2000, unit_price_cny=6.9, unit_price_usd=0.98),
-                    PriceTier(min_quantity=10000, unit_price_cny=6.5, unit_price_usd=0.92),
-                    PriceTier(min_quantity=50000, unit_price_cny=6.2, unit_price_usd=0.88),
-                ],
-                moq=2000,
-                supplier_tier="1688 实力商家 & Makepolo Verified",
-                years_active=14,
-                location="Ningbo, Zhejiang Province, China",
-                certifications=["ISO9001", "RoHS", "REACH"],
-                lead_time_days=10,
-                weight_kg=1.0,
-                volume_cbm=0.0017,
-                source_url="https://www.makepolo.com/"
-            ),
-            ChineseSupplier(
-                name="Jiangsu Dynamic Chemical Group",
-                platform="Baidu Aicai (百度爱采购) & Gongchang",
-                product_title=f"Export Standard High Performance {query}",
-                product_specs={"Application": "Profiles, Pipes, Films, Engineering Compound"},
-                unit_price_cny=7.0,
-                unit_price_usd=0.99,
-                price_tiers=[
-                    PriceTier(min_quantity=1000, unit_price_cny=7.4, unit_price_usd=1.05),
-                    PriceTier(min_quantity=10000, unit_price_cny=7.0, unit_price_usd=0.99),
-                ],
-                moq=1000,
-                supplier_tier="Gold Audited Chemical Supplier",
-                years_active=11,
-                location="Nanjing, Jiangsu, China",
-                certifications=["ISO9001", "SGS Verification"],
-                lead_time_days=12,
-                weight_kg=1.0,
-                volume_cbm=0.0018,
-                source_url="https://b2b.baidu.com/"
-            )
-        ]
-
-    def _generate_autoparts_suppliers(self, query: str, cn_kw: str) -> List[ChineseSupplier]:
-        """سورسینگ قطعات خودرو و لوازم یدکی (QiPeiRen, Gongchang, Makepolo, 1688)"""
-        return [
-            ChineseSupplier(
-                name="Zhejiang Ruian Auto Parts Manufacturing Group",
-                platform="QiPeiRen (汽配人) & Gongchang (中国工厂网)",
-                product_title=f"OEM/OES Quality Replacement {query} - {cn_kw}",
-                product_specs={
-                    "Quality Standard": "TS16949 / IATF16949 Certified Automotive Standard",
-                    "Compatibility": "Universal / Japanese, European & Iranian (Peugeot/Saipa) spec",
-                    "Material": "Ceramic / High Tensile Forged Alloy / High Durability",
-                    "Packaging": "Neutral Brand Box / Custom Client Packaging"
-                },
-                unit_price_cny=32.0,
-                unit_price_usd=4.5,
-                price_tiers=[
-                    PriceTier(min_quantity=50, unit_price_cny=38.0, unit_price_usd=5.35),
-                    PriceTier(min_quantity=200, unit_price_cny=32.0, unit_price_usd=4.5),
-                    PriceTier(min_quantity=1000, unit_price_cny=26.5, unit_price_usd=3.73),
-                ],
-                moq=50,
-                supplier_tier="QiPeiRen 汽配人 认证金牌厂商 (Ruian Auto Parts Capital)",
-                years_active=16,
-                location="Ruian, Wenzhou, Zhejiang (پایتخت قطعات خودرو چین)",
-                certifications=["IATF 16949", "ISO9001", "CE", "E-Mark"],
-                lead_time_days=8,
-                weight_kg=1.2,
-                volume_cbm=0.0025,
-                source_url="https://www.qipeiren.com/"
-            ),
-            ChineseSupplier(
-                name="Guangzhou Changsheng Auto Electrical Tech Co., Ltd.",
-                platform="Makepolo (马可波罗) & 1688",
-                product_title=f"Direct Factory Heavy Duty {query} Wholesale",
-                product_specs={
-                    "Testing": "100% Computerized Dynamometer & Pressure Leak Testing",
-                    "Warranty": "18 Months / 50,000 km International Warranty"
-                },
-                unit_price_cny=35.0,
-                unit_price_usd=4.9,
-                price_tiers=[
-                    PriceTier(min_quantity=100, unit_price_cny=37.0, unit_price_usd=5.2),
-                    PriceTier(min_quantity=500, unit_price_cny=33.0, unit_price_usd=4.65),
-                ],
+                name="[DEMO SAMPLE] Shenzhen Demo Electronics Co.",
+                platform="1688 Demo Sample",
+                product_title=f"{query} (نمونه آزمایشی - غیرواقعی) - {cn_kw}",
+                product_specs={"Note": "این داده صرفاً نمونه آموزشی است و پیشنهاد قیمت واقعی نیست"},
+                unit_price_cny=45.0,
+                price_tiers=[PriceTier(min_quantity=100, unit_price_cny=45.0)],
                 moq=100,
-                supplier_tier="Makepolo Verified Supplier & 1688 实力工厂",
-                years_active=12,
-                location="Yongfu Road Auto Parts Hub, Guangzhou, Guangdong",
-                certifications=["ISO9001", "CE", "RoHS"],
-                lead_time_days=10,
-                weight_kg=1.1,
-                volume_cbm=0.0022,
-                source_url="https://www.makepolo.com/"
-            ),
-            ChineseSupplier(
-                name="Jiangsu Changzhou Mingda Auto Lamp & Body Parts",
-                platform="Gongchang (中国工厂网) & Baidu B2B",
-                product_title=f"Precision Fit Aftermarket {query}",
-                product_specs={"Fitment": "Exact OEM Specification Replacement"},
-                unit_price_cny=29.5,
-                unit_price_usd=4.15,
-                price_tiers=[
-                    PriceTier(min_quantity=100, unit_price_cny=32.0, unit_price_usd=4.5),
-                    PriceTier(min_quantity=500, unit_price_cny=29.5, unit_price_usd=4.15),
-                ],
-                moq=100,
-                supplier_tier="China Factory Audited Manufacturer",
-                years_active=9,
-                location="Menghe Auto Parts Town, Changzhou, Jiangsu",
-                certifications=["ISO9001", "CCC", "DOT"],
-                lead_time_days=12,
-                weight_kg=1.3,
-                volume_cbm=0.003,
-                source_url="https://www.gongchang.com/"
-            )
-        ]
-
-    def _generate_tool_mro_suppliers(self, query: str, cn_kw: str) -> List[ChineseSupplier]:
-        """سورسینگ ابزارآلات و MRO صنعتی کارخانه‌ای (EHSY, Gongchang, Makepolo, 1688)"""
-        return [
-            ChineseSupplier(
-                name="EHSY Industrial Procurement Partner (西域供应链集团)",
-                platform="EHSY (西域 - www.ehsy.com)",
-                product_title=f"Industrial Grade Heavy Duty {query} - {cn_kw}",
-                product_specs={
-                    "Motor / Mechanism": "Pure Copper Brushless High Torque / All-Steel Planetary Gears",
-                    "Industrial Spec": "MRO Grade / Continuous Duty 24/7 Workshop Rating",
-                    "Safety & Standard": "GB Standard / CE / GS German TUV Safety Approved",
-                    "Package": "Heavy-Duty Shockproof BMC Tool Case + Full Accessories"
-                },
-                unit_price_cny=64.0,
-                unit_price_usd=9.0,
-                price_tiers=[
-                    PriceTier(min_quantity=20, unit_price_cny=72.0, unit_price_usd=10.1),
-                    PriceTier(min_quantity=100, unit_price_cny=64.0, unit_price_usd=9.0),
-                    PriceTier(min_quantity=500, unit_price_cny=57.0, unit_price_usd=8.0),
-                ],
-                moq=20,
-                supplier_tier="EHSY 西域 工业品直供认证 (Leading MRO Platform in China)",
-                years_active=15,
-                location="Shanghai Industrial MRO Logistics Hub, China",
-                certifications=["CE", "GS", "EMC", "ISO9001", "TUV"],
-                lead_time_days=6,
-                weight_kg=2.3,
-                volume_cbm=0.006,
-                source_url="https://www.ehsy.com/"
-            ),
-            ChineseSupplier(
-                name="Zhejiang Crown Tools Super Factory",
-                platform="Gongchang (中国工厂网) & 1688.com",
-                product_title=f"Direct Factory Wholesale Pro {query} Kit",
-                product_specs={
-                    "Power / Torque": "High Performance 21V Dual Battery Pack",
-                    "Housing": "Reinforced Anti-Drop Nylon Housing"
-                },
-                unit_price_cny=61.0,
-                unit_price_usd=8.6,
-                price_tiers=[
-                    PriceTier(min_quantity=50, unit_price_cny=66.0, unit_price_usd=9.3),
-                    PriceTier(min_quantity=200, unit_price_cny=61.0, unit_price_usd=8.6),
-                    PriceTier(min_quantity=1000, unit_price_cny=55.0, unit_price_usd=7.75),
-                ],
-                moq=50,
-                supplier_tier="Yongkang Hardware Capital Super Factory (中国工厂网)",
-                years_active=16,
-                location="Yongkang, Jinhua, Zhejiang (پایتخت ابزارآلات و سخت‌افزار چین)",
-                certifications=["CE", "RoHS", "ISO9001"],
-                lead_time_days=8,
-                weight_kg=2.2,
-                volume_cbm=0.0058,
-                source_url="https://www.gongchang.com/"
-            ),
-            ChineseSupplier(
-                name="Jiangsu GreatStar Hardware & Tooling Group",
-                platform="Makepolo (马可波罗) & Baidu B2B",
-                product_title=f"Professional Ergonomic {query} Export Edition",
-                product_specs={"Standard": "DIN Standard Workshop Grade"},
-                unit_price_cny=69.0,
-                unit_price_usd=9.7,
-                price_tiers=[
-                    PriceTier(min_quantity=50, unit_price_cny=74.0, unit_price_usd=10.4),
-                    PriceTier(min_quantity=200, unit_price_cny=69.0, unit_price_usd=9.7),
-                ],
-                moq=50,
-                supplier_tier="Makepolo Verified Supplier 12 Years",
-                years_active=13,
-                location="Taizhou, Jiangsu Province, China",
-                certifications=["CE", "GS", "ISO9001"],
-                lead_time_days=9,
-                weight_kg=2.4,
-                volume_cbm=0.0062,
-                source_url="https://www.makepolo.com/"
-            )
-        ]
-
-    def _generate_gadget_suppliers(self, query: str, cn_kw: str) -> List[ChineseSupplier]:
-        """سورسینگ گجت‌ها و الکترونیک مصرفی (1688, Makepolo, Gongchang, Baidu B2B, EHSY)"""
-        base_cny = 38.0
-        if "ساعت" in query.lower() or "watch" in query.lower():
-            base_cny = 48.0
-        elif "ایرپاد" in query.lower() or "هندزفری" in query.lower():
-            base_cny = 28.0
-        elif "پاوربانک" in query.lower():
-            base_cny = 35.0
-        elif "ماساژور" in query.lower():
-            base_cny = 32.0
-
-        return [
-            ChineseSupplier(
-                name="Shenzhen Yilong Smart Electronics Co., Ltd.",
-                platform="1688.com & Gongchang (中国工厂网)",
-                product_title=f"{query} OEM/ODM Custom Factory Wholesale - {cn_kw}",
-                product_specs={
-                    "Chipset / Driver": "High-Efficiency Low-Power DSP Processing Core",
-                    "Battery": "Pure Cobalt Grade A Cell, Long Battery Life",
-                    "Housing": "CNC Aviation Alloy & Skin-Friendly Coating",
-                    "Certificates": "CE, FCC, RoHS, MSDS, UN38.3 (Air Cargo Approved)"
-                },
-                unit_price_cny=base_cny,
-                unit_price_usd=round(base_cny / 7.1, 2),
-                price_tiers=[
-                    PriceTier(min_quantity=50, unit_price_cny=round(base_cny * 1.15, 1)),
-                    PriceTier(min_quantity=200, unit_price_cny=round(base_cny, 1)),
-                    PriceTier(min_quantity=1000, unit_price_cny=round(base_cny * 0.88, 1)),
-                ],
-                moq=50,
-                supplier_tier="1688 实力商家 & 中国工厂网 认证超级工厂",
-                years_active=9,
-                location="Baoan, Shenzhen, Guangdong (قطب تولید الکترونیک و گجت جهان)",
-                certifications=["CE", "FCC", "RoHS", "MSDS", "UN38.3"],
-                lead_time_days=5,
-                weight_kg=0.18,
-                volume_cbm=0.0006,
-                source_url="https://detail.1688.com"
-            ),
-            ChineseSupplier(
-                name="Dongguan Micro-Core Intelligent Technology Corp.",
-                platform="Makepolo (马可波罗) & Baidu Aicai (百度爱采购)",
-                product_title=f"Trending New Design {query} Gift Packaging",
-                product_specs={
-                    "Finish": "Premium Electroplated Metal Finish",
-                    "Packaging": "Sealed Retail Gift Box + English/Persian manual option"
-                },
-                unit_price_cny=round(base_cny * 1.08, 1),
-                unit_price_usd=round((base_cny * 1.08) / 7.1, 2),
-                price_tiers=[
-                    PriceTier(min_quantity=100, unit_price_cny=round(base_cny * 1.16, 1)),
-                    PriceTier(min_quantity=500, unit_price_cny=round(base_cny * 1.08, 1)),
-                    PriceTier(min_quantity=2000, unit_price_cny=round(base_cny * 0.95, 1)),
-                ],
-                moq=100,
-                supplier_tier="Makepolo Gold Supplier & Baidu Verified",
-                years_active=11,
-                location="Songshan Lake High-Tech Park, Dongguan, Guangdong",
-                certifications=["CE", "RoHS", "ISO9001", "BSCI"],
-                lead_time_days=7,
-                weight_kg=0.20,
-                volume_cbm=0.0007,
-                source_url="https://www.makepolo.com/"
-            ),
-            ChineseSupplier(
-                name="EHSY Digital Smart Gadgets Division",
-                platform="EHSY (西域) & Alibaba",
-                product_title=f"Certified Export Standard {query} Batch Supply",
-                product_specs={"Quality Level": "Grade A+ Zero-Defect Export Standard"},
-                unit_price_cny=round(base_cny * 1.12, 1),
-                unit_price_usd=round((base_cny * 1.12) / 7.1, 2),
-                price_tiers=[
-                    PriceTier(min_quantity=100, unit_price_cny=round(base_cny * 1.20, 1)),
-                    PriceTier(min_quantity=500, unit_price_cny=round(base_cny * 1.12, 1)),
-                ],
-                moq=100,
-                supplier_tier="EHSY 西域 数字化采购平台认证",
-                years_active=14,
-                location="Guangzhou Panyu Electronic Industrial Zone, China",
-                certifications=["CE", "FCC", "RoHS", "ISO9001"],
-                lead_time_days=6,
-                weight_kg=0.19,
-                volume_cbm=0.00065,
-                source_url="https://www.ehsy.com/"
-            )
-        ]
-
-    def _generate_general_suppliers(self, query: str, cn_kw: str) -> List[ChineseSupplier]:
-        """سورسینگ کالاهای مصرفی، لوازم خانه و آشپزخانه (YiwuGo, 1688, Gongchang, Makepolo)"""
-        return [
-            ChineseSupplier(
-                name="Yiwu United Commodities Import & Export Group",
-                platform="YiwuGo (义乌购 - www.yiwugo.com) & 1688",
-                product_title=f"Global Best Seller {query} Factory Direct - {cn_kw}",
-                product_specs={
-                    "Material": "Eco-Friendly Premium ABS / Stainless Steel / Food Safe",
-                    "Market Popularity": "Amazon / Digikala Top Ranking Best Selling Item",
-                    "Customization": "OEM Logo & Custom Packaging from 200pcs supported"
-                },
-                unit_price_cny=18.5,
-                unit_price_usd=2.6,
-                price_tiers=[
-                    PriceTier(min_quantity=100, unit_price_cny=21.0),
-                    PriceTier(min_quantity=500, unit_price_cny=18.5),
-                    PriceTier(min_quantity=2000, unit_price_cny=15.8),
-                ],
-                moq=100,
-                supplier_tier="Yiwu International Trade City Verified (义乌购官方直供)",
-                years_active=10,
-                location="Yiwu International Trade City District 2, Zhejiang (بزرگ‌ترین بازار عمده‌فروشی کالای خرد جهان)",
-                certifications=["CE", "FDA Food Grade", "RoHS"],
-                lead_time_days=4,
-                weight_kg=0.35,
-                volume_cbm=0.0012,
-                source_url="https://www.yiwugo.com/"
-            ),
-            ChineseSupplier(
-                name="Ningbo Sunrise Household Products Co., Ltd.",
-                platform="Gongchang (中国工厂网) & Makepolo (马可波罗)",
-                product_title=f"Direct Factory Clearance {query} Competitive Pricing",
-                product_specs={
-                    "Inspection": "100% Pre-Shipment Quality Control Inspection",
-                    "Export Standard": "European & Middle East Market Standard"
-                },
-                unit_price_cny=19.5,
-                unit_price_usd=2.75,
-                price_tiers=[
-                    PriceTier(min_quantity=200, unit_price_cny=21.5),
-                    PriceTier(min_quantity=1000, unit_price_cny=19.5),
-                ],
-                moq=200,
-                supplier_tier="Gongchang 认证优质工厂 & Makepolo 10年认证",
-                years_active=11,
-                location="Cixi, Ningbo, Zhejiang Province, China",
-                certifications=["ISO9001", "CE", "LFGB"],
-                lead_time_days=7,
-                weight_kg=0.38,
-                volume_cbm=0.0014,
-                source_url="https://www.gongchang.com/"
-            ),
-            ChineseSupplier(
-                name="Baidu Aicai Verified Home & Consumer Goods Hub",
-                platform="Baidu Aicai (百度爱采购) & EHSY",
-                product_title=f"High Efficiency Prime Batch {query}",
-                product_specs={"Quality Level": "Standard Export Grade"},
-                unit_price_cny=18.0,
-                unit_price_usd=2.54,
-                price_tiers=[
-                    PriceTier(min_quantity=200, unit_price_cny=19.8),
-                    PriceTier(min_quantity=1000, unit_price_cny=18.0),
-                ],
-                moq=200,
-                supplier_tier="Baidu B2B Super Procurement Hub",
-                years_active=8,
-                location="Jinhua, Zhejiang, China",
-                certifications=["CE", "ISO9001"],
-                lead_time_days=6,
-                weight_kg=0.36,
-                volume_cbm=0.0013,
-                source_url="https://b2b.baidu.com/"
+                supplier_tier="داده آزمایشی (Demo Data)",
+                data_type=DataType.DEMO,
+                incoterms=Incoterms.EXW,
+                verification_status=VerificationStatus.UNVERIFIED,
+                confidence_level="DEMO_NON_ACTIONABLE",
+                is_demo=True,
+                notes="این رکورد داده نمونه است و برای تصمیم‌گیری واقعی معتبر نیست."
             )
         ]

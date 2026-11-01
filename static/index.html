@@ -186,6 +186,28 @@
 
             <!-- ==================== تب ۱: داشبورد اصلی ==================== -->
             <div id="tab-dashboard" class="space-y-5">
+                <!-- هشدار عدم کفایت داده در صورت نبود داده قطعی -->
+                <div id="insufficient-data-banner" class="hidden bg-amber-50/90 border border-amber-200 rounded-2xl p-4 text-amber-900 shadow-xs">
+                    <div class="flex items-start gap-3">
+                        <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
+                        <div class="space-y-1">
+                            <div class="font-bold text-sm">عدم کفایت داده‌ها برای محاسبه قطعی سودآوری (Insufficient Data)</div>
+                            <div class="text-xs text-amber-800 leading-relaxed">
+                                هنوز پیش‌فاکتور قطعی از تأمین‌کننده چین یا قیمت معتبر در بازار ایران ثبت نشده است. این سیستم طبق قانون شفافیت تجاری، از ساختن سودهای خیالی خودداری می‌کند. 
+                                لطفاً از بخش «ورود دستی / CSV» پیش‌فاکتور کارخانه را ثبت کنید یا از لینک‌های جستجوی زنده در تب «سورس‌های چین» استعلام بگیرید.
+                            </div>
+                            <div class="flex gap-2 pt-2">
+                                <button onclick="switchTab('manual')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all">
+                                    ثبت پیش‌فاکتور چین یا قیمت بازار
+                                </button>
+                                <button onclick="switchTab('sources')" class="px-3 py-1.5 bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 rounded-lg text-xs font-bold transition-all">
+                                    مشاهده لینک‌های جستجوی چین
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ردیف کارت‌های هدر -->
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
                     <!-- کارت ۱: مشکی مات سودآوری -->
@@ -436,17 +458,25 @@
                     <p class="text-xs text-slate-400 mb-4">در مواردی که اسکرپ مستقیم کارخانه به دلیل دیوار آتش چین محدود است، اطلاعات قیمت را مستقیماً وارد کنید</p>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- فرم دستی -->
+                        <!-- فرم دستی پیش‌فاکتور چین -->
                         <form onsubmit="handleManualQuote(event)" class="space-y-3 text-xs">
-                            <div class="font-bold text-slate-700">ثبت تک‌موردی پیش‌فاکتور:</div>
+                            <div class="font-bold text-slate-700">ثبت تک‌موردی پیش‌فاکتور چین:</div>
                             <input type="text" id="m-name" placeholder="نام کارخانه یا فروشنده چینی" required class="w-full p-2.5 border border-slate-200 rounded-xl focus:ring-1 focus:ring-matte">
                             <input type="text" id="m-title" placeholder="عنوان فنی کالا" required class="w-full p-2.5 border border-slate-200 rounded-xl">
                             <div class="grid grid-cols-2 gap-2">
                                 <input type="number" step="0.1" id="m-cny" placeholder="قیمت فاکتور (یوان)" required class="p-2.5 border border-slate-200 rounded-xl">
                                 <input type="number" id="m-moq" placeholder="حداقل سفارش (MOQ)" value="100" class="p-2.5 border border-slate-200 rounded-xl">
                             </div>
-                            <button type="submit" class="w-full py-2.5 bg-matte text-white font-bold rounded-xl shadow-xs">
-                                ثبت پیش‌فاکتور در سیستم
+                            <div class="grid grid-cols-2 gap-2">
+                                <select id="m-incoterms" class="p-2.5 border border-slate-200 rounded-xl font-medium">
+                                    <option value="EXW">شرایط تحویل: EXW (درب کارخانه)</option>
+                                    <option value="FOB">شرایط تحویل: FOB (روی عرشه بندر چین)</option>
+                                    <option value="CIF">شرایط تحویل: CIF (بندر مقصد با بیمه)</option>
+                                </select>
+                                <input type="text" id="m-url" placeholder="لینک فروشگاه / ویچت" class="p-2.5 border border-slate-200 rounded-xl">
+                            </div>
+                            <button type="submit" class="w-full py-2.5 bg-matte hover:bg-black text-white font-bold rounded-xl shadow-xs transition-all">
+                                ثبت پیش‌فاکتور کارخانه در دیتابیس
                             </button>
                         </form>
 
@@ -454,13 +484,43 @@
                         <div class="p-5 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-center">
                             <i data-lucide="upload-cloud" class="w-8 h-8 text-slate-400 mb-2"></i>
                             <div class="text-xs font-bold text-matte">آپلود جدول قیمت کارخانه‌ها (CSV)</div>
-                            <div class="text-[11px] text-slate-400 mt-1 mb-4">فایل حاوی ستون‌های: name, product_title, unit_price_cny, moq</div>
+                            <div class="text-[11px] text-slate-400 mt-1 mb-4">فایل حاوی ستون‌های: name, product_title, unit_price_cny, moq, incoterms</div>
                             <input type="file" id="csvFileInput" accept=".csv" class="text-xs">
-                            <button onclick="handleCSVUpload()" class="mt-4 px-5 py-2 bg-slate-800 text-white text-xs font-bold rounded-full">
-                                بارگذاری و تحلیل
+                            <button onclick="handleCSVUpload()" class="mt-4 px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-full transition-all">
+                                بارگذاری و تحلیل خودکار
                             </button>
                         </div>
                     </div>
+                </div>
+
+                <!-- کارت دوم: ثبت استعلام قیمت فروش در بازار ایران -->
+                <div class="glass-card p-5">
+                    <h2 class="text-base font-extrabold text-matte mb-1">ثبت قیمت استعلام‌شده در بازار ایران</h2>
+                    <p class="text-xs text-slate-400 mb-4">ثبت قیمت‌های به‌دست‌آمده از بازار فیزیکی (چارسو، علاءالدین، جمهوری، ناصرخسرو)، ترب یا فروشگاه‌های اینترنتی</p>
+                    
+                    <form onsubmit="handleManualMarketPrice(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">عنوان کالا در ایران</label>
+                            <input type="text" id="iran-p-title" placeholder="مثلاً: ساعت هوشمند اولترا" required class="w-full p-2.5 border border-slate-200 rounded-xl">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">نام کانال / فروشگاه / بازار</label>
+                            <input type="text" id="iran-p-platform" placeholder="مثلاً: بازار چارسو / فروشگاه محلی" required class="w-full p-2.5 border border-slate-200 rounded-xl">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">قیمت فروش مصرف‌کننده (تومان)</label>
+                            <input type="number" id="iran-p-price" placeholder="مثلاً: 1450000" required class="w-full p-2.5 border border-slate-200 rounded-xl font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">لینک یا شماره تماس فروشنده</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="iran-p-url" placeholder="https://..." class="w-full p-2.5 border border-slate-200 rounded-xl">
+                                <button type="submit" class="px-4 py-2.5 bg-matte hover:bg-black text-white font-bold rounded-xl shrink-0 shadow-xs transition-all">
+                                    ثبت قیمت
+                                </button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -551,27 +611,53 @@
 
         function renderAll(data) {
             const r = data.report;
-            const sea = data.sea_scenarios ? data.sea_scenarios.realistic : null;
-            const air = data.air_scenarios ? data.air_scenarios.realistic : null;
-            const chosen = sea || air;
+            const banner = document.getElementById('insufficient-data-banner');
 
-            // Header Cards
-            if (chosen) {
-                document.getElementById('dash-net-profit').innerText = `${chosen.net_profit_unit_toman.toLocaleString()} ت`;
-                document.getElementById('dash-roi').innerText = `${chosen.roi_percent}%`;
-                document.getElementById('dash-box-china').innerText = `${r.air_cost_analysis ? r.air_cost_analysis.purchase_price_cny : '--'} ¥`;
-                document.getElementById('dash-box-landed').innerText = `${Math.round(chosen.landed_cost_unit_toman / 1000)}k ت`;
-                document.getElementById('dash-box-sell').innerText = `${Math.round(chosen.target_selling_price_toman / 1000)}k ت`;
-                document.getElementById('dash-margin').innerText = `${chosen.margin_percent}%`;
-            }
+            if (r.insufficient_data) {
+                if (banner) banner.classList.remove('hidden');
+                document.getElementById('dash-net-profit').innerText = 'اطلاعات ناکافی';
+                document.getElementById('dash-roi').innerText = '-';
+                document.getElementById('dash-box-china').innerText = '--';
+                document.getElementById('dash-box-landed').innerText = '--';
+                document.getElementById('dash-box-sell').innerText = '--';
+                document.getElementById('dash-margin').innerText = '-';
+                document.getElementById('dash-customs').innerText = '-';
+                document.getElementById('dash-vat').innerText = '-';
+                document.getElementById('dash-financing').innerText = '-';
+                document.getElementById('dash-shipping').innerText = 'محاسبه نیازمند داده قطعی است';
+            } else {
+                if (banner) banner.classList.add('hidden');
+                const sea = data.sea_scenarios ? data.sea_scenarios.realistic : null;
+                const air = data.air_scenarios ? data.air_scenarios.realistic : null;
+                const chosen = sea || air;
 
-            if (data.sea_scenarios && data.air_scenarios) {
-                document.getElementById('dash-shipping').innerText = `هوایی: ${Math.round(data.air_scenarios.realistic.line_items[3].amount_toman / 1000)}k | دریایی: ${Math.round(data.sea_scenarios.realistic.line_items[3].amount_toman / 1000)}k ت`;
-            }
-            if (chosen) {
-                document.getElementById('dash-customs').innerText = `${(chosen.line_items[5].amount_toman + chosen.line_items[6].amount_toman).toLocaleString()} ت`;
-                document.getElementById('dash-vat').innerText = `${chosen.line_items[7].amount_toman.toLocaleString()} ت`;
-                document.getElementById('dash-financing').innerText = `${chosen.line_items[11].amount_toman.toLocaleString()} ت`;
+                // Header Cards
+                if (chosen) {
+                    document.getElementById('dash-net-profit').innerText = `${chosen.net_profit_unit_toman.toLocaleString()} ت`;
+                    document.getElementById('dash-roi').innerText = `${chosen.roi_percent}%`;
+                    document.getElementById('dash-box-china').innerText = `${r.air_cost_analysis ? r.air_cost_analysis.purchase_price_cny : '--'} ¥`;
+                    document.getElementById('dash-box-landed').innerText = `${Math.round(chosen.landed_cost_unit_toman / 1000)}k ت`;
+                    document.getElementById('dash-box-sell').innerText = `${Math.round(chosen.target_selling_price_toman / 1000)}k ت`;
+                    document.getElementById('dash-margin').innerText = `${chosen.margin_percent}%`;
+                }
+
+                if (data.sea_scenarios && data.air_scenarios && data.sea_scenarios.realistic && data.air_scenarios.realistic) {
+                    document.getElementById('dash-shipping').innerText = `هوایی: ${Math.round(data.air_scenarios.realistic.line_items[4].amount_toman / 1000)}k | دریایی: ${Math.round(data.sea_scenarios.realistic.line_items[4].amount_toman / 1000)}k ت`;
+                }
+                if (chosen) {
+                    const custIdx = chosen.line_items.findIndex(i => i.name_en === 'customs_duty');
+                    const vatIdx = chosen.line_items.findIndex(i => i.name_en === 'vat');
+                    const finIdx = chosen.line_items.findIndex(i => i.name_en === 'financing_cost');
+
+                    const custDuty = custIdx >= 0 ? chosen.line_items[custIdx].amount_toman : 0;
+                    const commBen = custIdx >= 0 && chosen.line_items[custIdx+1] ? chosen.line_items[custIdx+1].amount_toman : 0;
+                    const vatVal = vatIdx >= 0 ? chosen.line_items[vatIdx].amount_toman : 0;
+                    const finVal = finIdx >= 0 ? chosen.line_items[finIdx].amount_toman : 0;
+
+                    document.getElementById('dash-customs').innerText = `${(custDuty + commBen).toLocaleString()} ت`;
+                    document.getElementById('dash-vat').innerText = `${vatVal.toLocaleString()} ت`;
+                    document.getElementById('dash-financing').innerText = `${finVal.toLocaleString()} ت`;
+                }
             }
 
             document.getElementById('dash-hscode').innerText = `HS: ${data.regulations.primary_hs_code}`;
@@ -582,45 +668,72 @@
             // Suppliers list
             const supList = document.getElementById('dash-suppliers-list');
             supList.innerHTML = '';
-            r.suppliers_china.forEach((s, idx) => {
-                const item = document.createElement('div');
-                item.className = 'p-3 bg-slate-50 rounded-2xl flex justify-between items-center text-xs';
-                item.innerHTML = `
-                    <div>
-                        <div class="font-extrabold text-matte flex items-center gap-1.5">
-                            <span>${idx + 1}. ${s.name}</span>
-                            <a href="${s.source_url}" target="_blank" class="text-blue-500 hover:underline">↗</a>
-                        </div>
-                        <div class="text-[11px] text-slate-400 mt-0.5">${s.platform} • ${s.location}</div>
-                    </div>
-                    <div class="text-left">
-                        <span class="inline-block bg-matte text-white px-3 py-1 rounded-full font-bold">${s.unit_price_cny} ¥</span>
-                        <div class="text-[10px] text-slate-400 mt-0.5 font-semibold">MOQ: ${s.moq}</div>
+            if (!r.suppliers_china || r.suppliers_china.length === 0) {
+                supList.innerHTML = `
+                    <div class="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center text-xs text-slate-500">
+                        <div class="font-bold mb-1">هیچ تأمین‌کننده قطعی ثبت نشده است</div>
+                        <div class="text-[11px] text-slate-400 mb-2">برای جلوگیری از داده‌های ساختگی، پیش‌فاکتور واقعی را در بخش «ورود دستی / CSV» اضافه کنید.</div>
+                        <button onclick="switchTab('manual')" class="px-3 py-1 bg-matte text-white text-[11px] font-bold rounded-full">ثبت پیش‌فاکتور چین</button>
                     </div>
                 `;
-                supList.appendChild(item);
-            });
+            } else {
+                r.suppliers_china.forEach((s, idx) => {
+                    let sBadge = '<span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold mr-1">تأمین‌کننده</span>';
+                    if (s.data_type === 'manual_quote') sBadge = '<span class="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold mr-1">پیش‌فاکتور دستی</span>';
+                    else if (s.data_type === 'csv_import') sBadge = '<span class="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold mr-1">ورود CSV</span>';
+                    else if (s.is_demo) sBadge = '<span class="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold mr-1">نمونه تستی</span>';
+
+                    const item = document.createElement('div');
+                    item.className = 'p-3 bg-slate-50 rounded-2xl flex justify-between items-center text-xs';
+                    item.innerHTML = `
+                        <div>
+                            <div class="font-extrabold text-matte flex items-center gap-1.5">
+                                <span>${idx + 1}. ${s.name}</span>
+                                ${sBadge}
+                                ${s.incoterms ? `<span class="text-[9px] bg-slate-200 text-slate-800 px-1.5 py-0.5 rounded font-bold">${s.incoterms}</span>` : ''}
+                                ${s.source_url ? `<a href="${s.source_url}" target="_blank" class="text-blue-500 hover:underline">↗</a>` : ''}
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">${s.platform} • ${s.location || 'چین'}</div>
+                        </div>
+                        <div class="text-left">
+                            <span class="inline-block bg-matte text-white px-3 py-1 rounded-full font-bold">${s.unit_price_cny} ¥</span>
+                            <div class="text-[10px] text-slate-400 mt-0.5 font-semibold">MOQ: ${s.moq}</div>
+                        </div>
+                    `;
+                    supList.appendChild(item);
+                });
+            }
 
             // Channels list
             const m = r.iran_market;
             if (m) {
-                document.getElementById('dash-iran-low').innerText = `${m.lowest_price_toman.toLocaleString()} ت`;
-                document.getElementById('dash-iran-avg').innerText = `${m.average_price_toman.toLocaleString()} ت`;
+                document.getElementById('dash-iran-low').innerText = m.lowest_price_toman !== null ? `${m.lowest_price_toman.toLocaleString()} ت` : 'نامشخص (استعلام)';
+                document.getElementById('dash-iran-avg').innerText = m.average_price_toman !== null ? `${m.average_price_toman.toLocaleString()} ت` : 'نامشخص';
                 document.getElementById('dash-iran-sellers').innerText = `${m.active_sellers_count} فروشگاه`;
 
                 const chList = document.getElementById('dash-channels-list');
                 chList.innerHTML = '';
                 (m.channels || []).forEach(ch => {
+                    let typeBadge = '';
+                    if (ch.is_live && ch.price_toman !== null) {
+                        typeBadge = '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">API زنده</span>';
+                    } else if (ch.data_type === 'manual_quote') {
+                        typeBadge = '<span class="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">دستی</span>';
+                    } else {
+                        typeBadge = '<span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">لینک استعلام</span>';
+                    }
+
+                    const priceText = ch.price_toman !== null ? `${ch.price_toman.toLocaleString()} ت` : 'استعلام قیمت';
                     const row = document.createElement('div');
                     row.className = 'p-2 bg-white border border-slate-100 rounded-xl flex justify-between items-center text-xs shadow-2xs';
                     row.innerHTML = `
                         <div class="flex items-center gap-1.5 font-bold text-slate-800">
                             <span>${ch.name}</span>
-                            ${ch.is_live ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.2 rounded font-bold">زنده</span>' : ''}
+                            ${typeBadge}
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="font-black text-matte">${ch.price_toman.toLocaleString()} ت</span>
-                            <a href="${ch.url}" target="_blank" class="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-bold">استعلام</a>
+                            <span class="font-black text-matte">${priceText}</span>
+                            <a href="${ch.url}" target="_blank" class="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-bold">مشاهده</a>
                         </div>
                     `;
                     chList.appendChild(row);
@@ -694,11 +807,23 @@
         }
 
         function renderScenarioDetails(type) {
-            if (!fullData || !fullData.sea_scenarios) return;
+            const cards = document.getElementById('scenario-metrics-cards');
+            const tbody = document.getElementById('scenario-line-items-body');
+
+            if (!fullData || !fullData.sea_scenarios || !fullData.sea_scenarios[type]) {
+                if (cards) {
+                    cards.innerHTML = `
+                        <div class="col-span-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-center text-amber-900 text-xs font-bold">
+                            محاسبه سناریو نیازمند ثبت پیش‌فاکتور قطعی و قیمت فروش هدف است. با ثبت پیش‌فاکتور در بخش «ورود دستی»، محاسبات فعال می‌شوند.
+                        </div>
+                    `;
+                }
+                if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-400">هیچ قلم هزینه‌ای به دلیل نبود داده قطعی محاسبه نشد.</td></tr>';
+                return;
+            }
             const scen = fullData.sea_scenarios[type] || fullData.air_scenarios[type];
             if (!scen) return;
 
-            const cards = document.getElementById('scenario-metrics-cards');
             cards.innerHTML = `
                 <div class="bg-slate-50 rounded-xl p-3 text-center">
                     <span class="text-slate-400 text-[10px]">بهای تمام‌شده واحد</span>
@@ -718,7 +843,6 @@
                 </div>
             `;
 
-            const tbody = document.getElementById('scenario-line-items-body');
             tbody.innerHTML = '';
             (scen.line_items || []).forEach(item => {
                 const tr = document.createElement('tr');
@@ -736,10 +860,12 @@
         async function handleManualQuote(e) {
             e.preventDefault();
             const body = {
-                supplier_name: document.getElementById('m-name').value,
-                product_title: document.getElementById('m-title').value,
+                supplier_name: document.getElementById('m-name').value.trim(),
+                product_title: document.getElementById('m-title').value.trim(),
                 unit_price_cny: parseFloat(document.getElementById('m-cny').value),
-                moq: parseInt(document.getElementById('m-moq').value)
+                moq: parseInt(document.getElementById('m-moq').value) || 100,
+                incoterms: document.getElementById('m-incoterms').value,
+                source_url: document.getElementById('m-url').value.trim()
             };
             try {
                 const res = await fetch('/api/manual-quote', {
@@ -748,10 +874,32 @@
                     body: JSON.stringify(body)
                 });
                 const d = await res.json();
-                alert(d.message);
+                alert(d.message || 'پیش‌فاکتور با موفقیت ذخیره شد.');
                 e.target.reset();
             } catch (err) {
                 alert('خطا در ثبت پیش‌فاکتور');
+            }
+        }
+
+        async function handleManualMarketPrice(e) {
+            e.preventDefault();
+            const body = {
+                product_title: document.getElementById('iran-p-title').value.trim(),
+                platform: document.getElementById('iran-p-platform').value.trim(),
+                price_toman: parseFloat(document.getElementById('iran-p-price').value),
+                source_url: document.getElementById('iran-p-url').value.trim()
+            };
+            try {
+                const res = await fetch('/api/manual-market-price', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+                const d = await res.json();
+                alert(d.message || 'قیمت استعلام بازار ایران با موفقیت ذخیره شد.');
+                e.target.reset();
+            } catch (err) {
+                alert('خطا در ثبت قیمت استعلام بازار.');
             }
         }
 

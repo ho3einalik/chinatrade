@@ -1,187 +1,172 @@
 """
 Iran Market Intelligence Engine.
-Performs live queries against Iranian e-commerce APIs (Digikala / Torob)
-and generates channel-by-channel pricing breakdowns across:
-- Digikala (مارکت‌پلیس سراسری)
-- Torob (موتور جستجوی ۱۰,۰۰۰ فروشگاه اینترنتی)
-- Emalls (ایمالز - مقایسه قیمت فروشگاه‌های معتبر)
-- Basalam (باسلام - غرفه‌داران و واردکنندگان مستقیم)
-- Specialized Webshops (تکنولایف، ابزارمارکت، مقداد آی‌تی، جانبی، زنبیل)
-- Divar / Sheypoor (کف قیمت نقد معامله دست‌اول در بازار آزاد)
+Performs live queries against Digikala API, extracts robust pricing statistics,
+and generates direct search links for Iranian distribution channels:
+- Digikala (مارکت‌پلیس سراسری - استعلام زنده واقعی)
+- Torob (موتور مقایسه ۱۰,۰۰۰ فروشگاه اینترنتی - لینک جستجوی عمیق)
+- Emalls (ایمالز - مرجع قیمت کالاهای رسمی - لینک جستجوی عمیق)
+- Basalam (باسلام - غرفه‌داران و واردکنندگان - لینک جستجوی عمیق)
+- Divar / Sheypoor (معاملات نقدی بازار آزاد - لینک جستجوی عمیق)
+
+قانون اصالت داده: هیچ قیمت تخمینی با ضرایب ثابت (مانند ضرب در ۱.۰۳) تولید نمی‌شود.
+در صورت عدم دسترسی به قیمت قطعی، وضعیت unavailable ثبت شده و لینک جستجوی مستقیم ارائه می‌شود.
 """
 
 from typing import Optional, Dict, Any, List
 import urllib.parse
-import requests
-from config import CONFIG
-from core.models import IranMarketPrice, IranMarketChannel
+from datetime import datetime, timezone
+import logging
+
+from connectors.digikala import DigikalaConnector
+from core.models import IranMarketPrice, IranMarketChannel, DataType, DataFreshness
+
+logger = logging.getLogger("iran_market")
 
 class IranMarketEngine:
-    def __init__(self):
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            'Accept-Language': 'fa,en-US;q=0.9,en;q=0.8',
-            'Accept': 'application/json, text/plain, */*'
-        }
+    def __init__(self, db=None):
+        self.db = db
+        self.digikala_connector = DigikalaConnector()
 
-    def fetch_live_market_data(self, query: str) -> Optional[Dict[str, Any]]:
+    def analyze_iran_market(
+        self,
+        query: str,
+        custom_target_price: Optional[float] = None
+    ) -> IranMarketPrice:
         """
-        استعلام زنده از API دیجی‌کالا برای دریافت قیمت‌های واقعی بازار ایران
+        تحلیل و استخراج قیمت‌های واقعی کالا در بازار ایران:
+        ۱. استعلام زنده API از دیجی‌کالا
+        ۲. بررسی قیمت‌های دستی ثبت‌شده توسط کاربر در دیتابیس
+        ۳. ارائه لینک‌های مستقیم استعلام در ترب، ایمالز، باسلام و دیوار
+        ۴. در صورت نبود قیمت زنده یا دستی، مقدار قیمت‌ها None بازگردانده شده و وضعیت no_results ثبت می‌شود.
         """
-        try:
-            encoded_q = urllib.parse.quote(query)
-            url = f"https://api.digikala.com/v1/search/?q={encoded_q}"
-            resp = requests.get(url, headers=self.headers, timeout=6)
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                products = data.get('data', {}).get('products', [])
-                if products:
-                    prices = []
-                    sample_products = []
-                    
-                    for p in products:
-                        price_rial = p.get('default_variant', {}).get('price', {}).get('selling_price', 0)
-                        if price_rial and price_rial > 0:
-                            price_toman = price_rial // 10
-                            prices.append(price_toman)
-                            if len(sample_products) < 5:
-                                sample_products.append({
-                                    "title": p.get('title_fa'),
-                                    "price_toman": price_toman,
-                                    "id": p.get('id'),
-                                    "url": f"https://www.digikala.com/product/dkp-{p.get('id')}"
-                                })
-
-                    if prices:
-                        prices.sort()
-                        lowest = prices[0]
-                        highest = prices[-1]
-                        avg = sum(prices) // len(prices)
-                        
-                        return {
-                            "title_fa": products[0].get('title_fa', query),
-                            "lowest": lowest,
-                            "average": avg,
-                            "highest": highest,
-                            "sellers_count": len(products),
-                            "samples": sample_products,
-                            "platform": "دیجی‌کالا، ترب، ایمالز، باسلام و فروشگاه‌های تخصصی آنلاین"
-                        }
-        except Exception as e:
-            print(f"[!] خطا در استعلام زنده دیجی‌کالا: {e}")
-        
-        return None
-
-    def analyze_iran_market(self, query: str, custom_target_price: Optional[float] = None) -> IranMarketPrice:
-        """
-        تحلیل و استخراج قیمت‌های کالا در بازار ایران:
-        ۱. استعلام زنده وب
-        ۲. محاسبه تفکیکی کانال‌های توزیع: ترب، ایمالز، باسلام، فروشگاه‌های تخصصی، دیوار
-        """
-        live_data = self.fetch_live_market_data(query)
-
-        if live_data:
-            lowest = live_data["lowest"]
-            avg = live_data["average"]
-            highest = live_data["highest"]
-            title = live_data["title_fa"]
-            sellers = live_data["sellers_count"]
-            platform = live_data["platform"]
-            samples = live_data.get("samples", [])
-            velocity = min(max(sellers // 3, 7), 10)
-        else:
-            # تخمین هوشمند صنعتی در صورت کلمات تخصصی یا قطعی اینترنت
-            q_lower = query.lower()
-            title = f"{query} در بازار ایران"
-            platform = "ترب، دیجی‌کالا، ایمالز و بورس کالای ایران"
-            samples = []
-
-            if any(w in q_lower for w in ["pvc", "hdpe", "pp", "pet", "پلیمر", "پتروشیمی", "رزین"]):
-                lowest, avg, highest, sellers, velocity = 48500, 56000, 68000, 15, 9
-                title = f"{query} (بازار پتروشیمی و بورس کالای ایران)"
-            elif any(w in q_lower for w in ["خودرو", "ماشین", "لنت", "شمع", "فیلتر", "دیسک", "لاستیک", "یدکی"]):
-                lowest, avg, highest, sellers, velocity = 520000, 850000, 1400000, 28, 9
-                title = f"{query} (بازار چراغ‌برق و قطعات خودرو ایران)"
-            elif any(w in q_lower for w in ["ساعت", "watch", "واچ"]):
-                lowest, avg, highest, sellers, velocity = 1250000, 1680000, 2400000, 35, 9
-            elif any(w in q_lower for w in ["ایرپاد", "هندزفری", "earbuds"]):
-                lowest, avg, highest, sellers, velocity = 650000, 950000, 1450000, 42, 10
-            elif any(w in q_lower for w in ["پاوربانک", "power bank"]):
-                lowest, avg, highest, sellers, velocity = 820000, 1180000, 1650000, 28, 8
-            elif any(w in q_lower for w in ["دریل", "ابزار", "پیچ گوشتی"]):
-                lowest, avg, highest, sellers, velocity = 1750000, 2350000, 3100000, 22, 8
-            elif any(w in q_lower for w in ["ماساژور"]):
-                lowest, avg, highest, sellers, velocity = 750000, 1100000, 1550000, 26, 8
-            else:
-                lowest, avg, highest, sellers, velocity = 420000, 680000, 980000, 18, 7
-
-        if custom_target_price and custom_target_price > 0:
-            avg = custom_target_price
-            lowest = round(custom_target_price * 0.85)
-            highest = round(custom_target_price * 1.25)
-
         encoded_q = urllib.parse.quote(query)
         torob_url = f"https://torob.com/search/?query={encoded_q}"
         emalls_url = f"https://emalls.ir/search/{encoded_q}"
         basalam_url = f"https://basalam.com/search?q={encoded_q}"
         divar_url = f"https://divar.ir/s/tehran?q={encoded_q}"
+        digikala_url = f"https://www.digikala.com/search/?q={encoded_q}"
 
-        # ساخت کانال‌های تفکیکی بازار ایران
-        channels = [
+        # ۱. استعلام زنده از دیجی‌کالا
+        live_result = self.digikala_connector.search(query)
+        has_live_data = live_result.get("status") == "LIVE_VERIFIED" and live_result.get("products_count", 0) > 0
+
+        now_utc = datetime.now(timezone.utc).isoformat()
+
+        if has_live_data:
+            stats = live_result.get("statistics") or {}
+            lowest = float(stats.get("min_toman", 0))
+            avg = float(stats.get("trimmed_mean_toman") or stats.get("median_toman", 0))
+            highest = float(stats.get("max_toman", 0))
+            sellers_count = live_result.get("products_count", 0)
+            sample_products = live_result.get("products", [])[:5]
+            status = "available"
+            title_fa = sample_products[0]["title_fa"] if sample_products else query
+            data_type = DataType.LIVE_API
+            freshness = DataFreshness.FRESH
+            velocity = min(max(sellers_count // 3, 6), 10)
+        elif custom_target_price and custom_target_price > 0:
+            # کاربر دستی قیمت فروش هدف وارد کرده است
+            lowest = float(custom_target_price)
+            avg = float(custom_target_price)
+            highest = float(custom_target_price)
+            sellers_count = 1
+            sample_products = []
+            status = "manual_override"
+            title_fa = query
+            data_type = DataType.MANUAL_QUOTE
+            freshness = DataFreshness.FRESH
+            velocity = 6
+        else:
+            # هیچ استعلام زنده‌ای موجود نیست و قیمت دستی هم داده نشده
+            lowest = None
+            avg = None
+            highest = None
+            sellers_count = 0
+            sample_products = []
+            status = "no_results"
+            title_fa = query
+            data_type = DataType.ESTIMATE
+            freshness = DataFreshness.UNAVAILABLE
+            velocity = 5
+
+        # ۲. بررسی قیمت‌های دستی ثبت‌شده در پایگاه داده
+        manual_prices = {}
+        if self.db:
+            try:
+                rec_prices = self.db.get_latest_market_prices(query)
+                for rp in rec_prices:
+                    manual_prices[rp["platform"].lower()] = float(rp["price_toman"])
+            except Exception:
+                pass
+
+        # ۳. ساخت کانال‌های بازار ایران با صداقت کامل
+        # فقط دیجی‌کالا در صورت پاسخ واقعی زنده تلقی می‌شود؛ بقیه لینک‌های جستجوی مستقیم هستند مگر اینکه کاربر دستی قیمت داده باشد.
+        channels: List[IranMarketChannel] = [
             IranMarketChannel(
                 name="دیجی‌کالا (Digikala)",
-                price_toman=avg,
-                price_label="تک‌فروشی آنلاین با گارانتی و ارسال سریع",
-                url=f"https://www.digikala.com/search/?q={encoded_q}",
-                is_live=bool(live_data)
+                price_toman=avg if has_live_data else (custom_target_price or None),
+                price_label="استعلام زنده موجودی و قیمت فروشگاه‌ها" if has_live_data else "استعلام زنده ناموفق یا بدون نتیجه",
+                url=digikala_url,
+                is_live=has_live_data,
+                data_type=DataType.LIVE_API if has_live_data else (DataType.MANUAL_QUOTE if custom_target_price else DataType.ESTIMATE),
+                channel_type="live_api",
+                fetch_time_utc=now_utc if has_live_data else None
             ),
             IranMarketChannel(
-                name="ترب (Torob - موتور مقایسه ۱۰,۰۰۰ فروشگاه)",
-                price_toman=lowest,
-                price_label="کف قیمت رقابتی میان ارزان‌ترین مغازه‌های اینترنتی",
+                name="ترب (Torob - مقایسه ۱۰,۰۰۰ فروشگاه)",
+                price_toman=manual_prices.get("torob"),
+                price_label="قیمت ثبت‌شده توسط کاربر" if "torob" in manual_prices else "لینک جستجوی مستقیم (ضدربات ترب خزش خودکار را مسدود می‌کند)",
                 url=torob_url,
-                is_live=True
+                is_live=False,
+                data_type=DataType.MANUAL_QUOTE if "torob" in manual_prices else DataType.ESTIMATE,
+                channel_type="search_link",
+                fetch_time_utc=now_utc if "torob" in manual_prices else None
             ),
             IranMarketChannel(
                 name="ایمالز (Emalls - مقایسه قیمت فروشگاه‌ها)",
-                price_toman=round(lowest * 1.03),
-                price_label="میانگین فروشگاه‌های معتبر و تخصصی",
+                price_toman=manual_prices.get("emalls"),
+                price_label="قیمت ثبت‌شده توسط کاربر" if "emalls" in manual_prices else "لینک جستجوی مستقیم ایمالز",
                 url=emalls_url,
-                is_live=True
+                is_live=False,
+                data_type=DataType.MANUAL_QUOTE if "emalls" in manual_prices else DataType.ESTIMATE,
+                channel_type="search_link",
+                fetch_time_utc=now_utc if "emalls" in manual_prices else None
             ),
             IranMarketChannel(
-                name="باسلام (Basalam - غرفه‌داران و واردکنندگان مستقیم)",
-                price_toman=round(avg * 0.94),
-                price_label="فروش مستقیم غرفه‌ها و بنکداری‌های آنلاین",
+                name="باسلام (Basalam - غرفه‌داران و بنکداران)",
+                price_toman=manual_prices.get("basalam"),
+                price_label="قیمت ثبت‌شده توسط کاربر" if "basalam" in manual_prices else "لینک جستجوی مستقیم باسلام",
                 url=basalam_url,
-                is_live=True
+                is_live=False,
+                data_type=DataType.MANUAL_QUOTE if "basalam" in manual_prices else DataType.ESTIMATE,
+                channel_type="search_link",
+                fetch_time_utc=now_utc if "basalam" in manual_prices else None
             ),
             IranMarketChannel(
-                name="فروشگاه‌های تخصصی مستقل (تکنولایف، ابزارمارکت، زنبیل)",
-                price_toman=round(avg * 0.98),
-                price_label="فروش مستقیم در سایت‌های مستقل صنف مربوطه",
-                url=torob_url,
-                is_live=True
-            ),
-            IranMarketChannel(
-                name="دیوار و بازار آزاد (Divar - معامله نقدی حضوری)",
-                price_toman=round(lowest * 0.93),
-                price_label="کف قیمت معامله عمده و نقد کف بازار",
+                name="دیوار و بازار آزاد (Divar)",
+                price_toman=manual_prices.get("divar"),
+                price_label="قیمت ثبت‌شده توسط کاربر" if "divar" in manual_prices else "لینک جستجوی مستقیم آگهی‌های دیوار",
                 url=divar_url,
-                is_live=True
+                is_live=False,
+                data_type=DataType.MANUAL_QUOTE if "divar" in manual_prices else DataType.ESTIMATE,
+                channel_type="search_link",
+                fetch_time_utc=now_utc if "divar" in manual_prices else None
             )
         ]
 
         return IranMarketPrice(
-            platform=platform,
-            title_fa=title,
+            platform="دیجی‌کالا (استعلام زنده) • ترب و ایمالز (لینک مستقیم)",
+            title_fa=title_fa,
             lowest_price_toman=lowest,
             average_price_toman=avg,
             highest_price_toman=highest,
-            active_sellers_count=sellers,
+            active_sellers_count=sellers_count,
             sales_velocity_score=velocity,
             source_url=torob_url,
             channels=channels,
-            sample_products=samples
+            sample_products=sample_products,
+            status=status,
+            data_type=data_type,
+            freshness=freshness,
+            fetch_time_utc=now_utc
         )

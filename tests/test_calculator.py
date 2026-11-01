@@ -78,10 +78,11 @@ def test_3_scenarios_ranking_and_metrics(test_supplier):
     assert r.break_even_units <= 500
 
     # Line items completeness
-    assert len(r.line_items) == 13
+    assert len(r.line_items) >= 13
     assert any(item.name_en == "vat" for item in r.line_items)
     assert any(item.name_en == "financing_cost" for item in r.line_items)
     assert any(item.name_en == "remittance_fee" for item in r.line_items)
+    assert any(item.name_en == "china_origin_handling" for item in r.line_items)
 
 def test_legacy_breakdown_compatibility(test_supplier):
     calc = ImportProfitCalculator()
@@ -97,3 +98,83 @@ def test_legacy_breakdown_compatibility(test_supplier):
     assert legacy.shipping_method == "Sea Freight"
     assert legacy.break_even_price_toman > 0
     assert legacy.profit_margin_percent is not None
+
+def test_incoterms_differences(test_supplier):
+    """
+    Verifies Incoterms effects on landed cost:
+    EXW: Buyer pays China inland transport + port handling + international shipping + insurance + customs.
+    FOB: Seller pays China inland transport + port handling.
+    CIF: Seller pays inland transport + port handling + international freight + marine insurance.
+    Therefore: Landed cost EXW > Landed cost FOB > Landed cost CIF for the identical factory quote.
+    """
+    from core.models import Incoterms
+    calc = ImportProfitCalculator()
+    target_price = 1_500_000
+
+    # 1. EXW
+    res_exw = calc.calculate_landed_cost_scenarios(
+        supplier=test_supplier,
+        target_iran_price_toman=target_price,
+        shipping_method="Air Cargo",
+        incoterms=Incoterms.EXW,
+        batch_quantity=500
+    )
+
+    # 2. FOB
+    res_fob = calc.calculate_landed_cost_scenarios(
+        supplier=test_supplier,
+        target_iran_price_toman=target_price,
+        shipping_method="Air Cargo",
+        incoterms=Incoterms.FOB,
+        batch_quantity=500
+    )
+
+    # 3. CIF
+    res_cif = calc.calculate_landed_cost_scenarios(
+        supplier=test_supplier,
+        target_iran_price_toman=target_price,
+        shipping_method="Air Cargo",
+        incoterms=Incoterms.CIF,
+        batch_quantity=500
+    )
+
+    cost_exw = res_exw.realistic.landed_cost_unit_toman
+    cost_fob = res_fob.realistic.landed_cost_unit_toman
+    cost_cif = res_cif.realistic.landed_cost_unit_toman
+
+    assert cost_exw > cost_fob, f"EXW cost ({cost_exw}) should be greater than FOB cost ({cost_fob})"
+    assert cost_fob > cost_cif, f"FOB cost ({cost_fob}) should be greater than CIF cost ({cost_cif})"
+
+def test_insufficient_data_handling():
+    """
+    Verifies that when supplier is None or market price is None,
+    the calculator marks is_sufficient_data=False and does not hallucinate arbitrary profits.
+    """
+    calc = ImportProfitCalculator()
+
+    # Case 1: Missing supplier
+    res_no_supplier = calc.calculate_landed_cost_scenarios(
+        supplier=None,
+        target_iran_price_toman=1_000_000,
+        shipping_method="Sea Freight"
+    )
+    assert res_no_supplier.is_sufficient_data is False
+    assert res_no_supplier.realistic is None
+    assert res_no_supplier.optimistic is None
+    assert res_no_supplier.pessimistic is None
+
+    # Case 2: Missing target Iran price
+    supp = ChineseSupplier(
+        name="Test Factory",
+        platform="1688",
+        product_title="Sample",
+        unit_price_cny=50.0,
+        moq=100
+    )
+    res_no_price = calc.calculate_landed_cost_scenarios(
+        supplier=supp,
+        target_iran_price_toman=None,
+        shipping_method="Sea Freight"
+    )
+    assert res_no_price.is_sufficient_data is False
+    assert res_no_price.realistic is None
