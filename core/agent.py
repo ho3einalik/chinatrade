@@ -196,9 +196,10 @@ class ChinaIranImportAgent:
             iran_sample_count=sample_count
         )
 
-        # 7. Chinese B2B Search Links
+        # 7. Chinese B2B Search Links (Including Alibaba, 1688, AliExpress)
         chinese_kw = self.sourcing_engine.translate_to_chinese_keywords(product_query)
-        b2b_links = self.b2b_connector.generate_search_links(chinese_kw)
+        english_kw = self.sourcing_engine.translate_to_english_keywords(product_query)
+        b2b_links = self.b2b_connector.generate_search_links(chinese_kw, english_kw)
 
         # Helper serializer for scenarios
         def serialize_scenario_res(scen_obj: Optional[ComprehensiveLandedCostResult]):

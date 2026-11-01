@@ -41,7 +41,7 @@ def test_china_b2b_live_links_generation():
     links = connector.generate_search_links("TWS ANC Earbuds")
 
     # Verify all major platforms have structured descriptors
-    for plat in ["ehsy", "gongchang", "makepolo", "1688", "chemnet"]:
+    for plat in ["alibaba", "1688", "aliexpress", "ehsy", "gongchang", "makepolo", "chemnet"]:
         assert plat in links
         assert "url" in links[plat]
         assert "status" in links[plat]

@@ -1,7 +1,9 @@
 """
 China Multi-Source Sourcing Engine.
 Integrates verified factory networks and B2B wholesale platforms:
-- 1688.com (بزرگ‌ترین پلتفرم عمده‌فروشی داخلی چین)
+- Alibaba.com (بزرگ‌ترین پلتفرم بین‌المللی B2B و سفارش کانتینری با ضمانت Trade Assurance)
+- 1688.com (بزرگ‌ترین پلتفرم عمده‌فروشی داخلی چین با قیمت درب کارخانه)
+- AliExpress (پلتفرم جهانی خرید نمونه، تست محصول و سفارشات با تیراژ خرد Low MOQ)
 - EHSY (西域 - www.ehsy.com) (تجهیزات صنعتی و MRO کارخانه‌ای)
 - Gongchang (中国工厂网 - www.gongchang.com) (دایرکتوری مستقیم کارخانه‌ها)
 - Makepolo (马可波罗 - www.makepolo.com) (موتور جستجوی خریدهای عمده B2B)
@@ -23,6 +25,30 @@ class ChinaSourcingEngine:
     def __init__(self, db=None):
         self.db = db
         self.platform_catalog = {
+            "alibaba": {
+                "name": "Alibaba.com (International B2B)",
+                "url": "https://www.alibaba.com/",
+                "search_template": "https://www.alibaba.com/trade/search?SearchText={query}",
+                "specialty": "بزرگ‌ترین پلتفرم بین‌المللی B2B عمده‌فروشی، سفارش کانتینری و کارخانجات Trade Assurance",
+                "status": "Verified & Active (HTTP 200)",
+                "requires_auth": False
+            },
+            "1688": {
+                "name": "1688.com (Alibaba Domestic)",
+                "url": "https://www.1688.com/",
+                "search_template": "https://s.1688.com/selloffer/offer_search.htm?keywords={query}",
+                "specialty": "بزرگ‌ترین پلتفرم عمده‌فروشی چین با قیمت‌های فاکتور داخلی بدون کارمزد دلاری",
+                "status": "Manual Search Link (ضدربات علی‌بابا فعال است)",
+                "requires_auth": True
+            },
+            "aliexpress": {
+                "name": "AliExpress (خرید نمونه و تست بازار)",
+                "url": "https://www.aliexpress.com/",
+                "search_template": "https://www.aliexpress.com/wholesale?SearchText={query}",
+                "specialty": "خرید نمونه تستی (Sample Orders)، اعتبارسنجی اولیه کالا و خرید با حداقل تیراژ (Low MOQ)",
+                "status": "Verified & Active (HTTP 200)",
+                "requires_auth": False
+            },
             "ehsy": {
                 "name": "EHSY (西域)",
                 "url": "https://www.ehsy.com/",
@@ -46,14 +72,6 @@ class ChinaSourcingEngine:
                 "specialty": "موتور جستجوی تامین‌کنندگان و خرید عمده B2B در صنایع مختلف",
                 "status": "Verified & Active (HTTP 200)",
                 "requires_auth": False
-            },
-            "1688": {
-                "name": "1688.com (Alibaba Domestic)",
-                "url": "https://www.1688.com/",
-                "search_template": "https://s.1688.com/selloffer/offer_search.htm?keywords={query}",
-                "specialty": "بزرگ‌ترین پلتفرم عمده‌فروشی چین با قیمت‌های فاکتور داخلی بدون کارمزد دلاری",
-                "status": "Manual Search Link (ضدربات علی‌بابا فعال است)",
-                "requires_auth": True
             },
             "yiwugo": {
                 "name": "YiwuGo (义乌购)",
@@ -133,15 +151,58 @@ class ChinaSourcingEngine:
                 return v
         return query
 
+    def translate_to_english_keywords(self, query: str) -> str:
+        """
+        تبدیل کلیدواژه‌های فارسی به عبارات استاندارد انگلیسی جهت جستجو در پلتفرم‌های بین‌المللی مانند Alibaba و AliExpress
+        """
+        dict_map = {
+            "ساعت هوشمند": "smart watch",
+            "ایرپاد": "tws wireless earbuds bluetooth",
+            "هندزفری بلوتوث": "bluetooth wireless earphones",
+            "پاوربانک": "power bank 20000mah fast charging",
+            "پودر pvc": "pvc resin powder s65",
+            "pvc": "pvc resin powder",
+            "پلی اتیلن": "hdpe granules polyethylene raw material",
+            "hdpe": "hdpe virgin granules",
+            "پلی پروپیلن": "polypropylene pp granules homopolymer",
+            "pp": "polypropylene pp granules",
+            "پت": "pet resin bottle grade",
+            "pet": "pet bottle grade resin",
+            "دریل شارژی": "brushless cordless drill 21v",
+            "دریل": "cordless power drill",
+            "ابزار": "industrial hardware power tools",
+            "ماساژور تفنگی": "fascia massage gun deep tissue",
+            "ماساژور": "electric body massager",
+            "اسپیکر بلوتوث": "portable bluetooth speaker waterproof",
+            "دوربین مداربسته": "wifi cctv security camera ptz",
+            "لوازم خودرو": "auto spare parts accessories",
+            "قطعات خودرو": "auto spare parts replacement",
+            "لنت ترمز": "ceramic brake pads auto",
+            "فیلتر هوا": "car air filter engine oil filter",
+            "کمک فنر": "car shock absorber suspension",
+            "تسمه": "automotive timing belt",
+            "چراغ خودرو": "car led headlights assembly",
+            "لوازم خانگی": "smart home appliances gadgets",
+            "کابل شارژ": "fast charging cable type-c pd",
+        }
+        q_lower = query.lower().strip()
+        for k, v in dict_map.items():
+            if k in q_lower:
+                return v
+        return query
+
     def get_search_links(self, query: str) -> Dict[str, Dict[str, Any]]:
         """تولید لینک‌های عمیق جستجوی مستقیم در تمام پلتفرم‌های چین"""
         cn_keyword = self.translate_to_chinese_keywords(query)
-        encoded_kw = urllib.parse.quote(cn_keyword)
+        en_keyword = self.translate_to_english_keywords(query)
+        encoded_cn = urllib.parse.quote(cn_keyword)
+        encoded_en = urllib.parse.quote(en_keyword)
         links = {}
         for key, p in self.platform_catalog.items():
+            target_encoded = encoded_en if key in ["alibaba", "aliexpress"] else encoded_cn
             links[key] = {
                 "name": p["name"],
-                "url": p["search_template"].format(query=encoded_kw),
+                "url": p["search_template"].format(query=target_encoded),
                 "specialty": p["specialty"],
                 "status": p["status"],
                 "requires_auth": p["requires_auth"]

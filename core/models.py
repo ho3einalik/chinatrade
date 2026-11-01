@@ -42,7 +42,7 @@ class PriceTier(BaseModel):
 
 class ChineseSupplier(BaseModel):
     name: str = Field(..., description="نام کارخانه یا تامین‌کننده")
-    platform: str = Field(..., description="پلتفرم سورسینگ: 1688, EHSY, Gongchang, Makepolo, QiPeiRen, Alibaba, ChemNet, YiwuGo, Baidu B2B, Manual")
+    platform: str = Field(..., description="پلتفرم سورسینگ: Alibaba, 1688, AliExpress, EHSY, Gongchang, Makepolo, QiPeiRen, ChemNet, YiwuGo, Baidu B2B, Manual")
     product_title: str = Field(..., description="عنوان محصول در سایت چینی")
     product_specs: Dict[str, Any] = Field(default_factory=dict, description="مشخصات فنی و پکیجینگ")
     unit_price_cny: float = Field(..., description="پایین‌ترین یا مناسب‌ترین قیمت به یوان")

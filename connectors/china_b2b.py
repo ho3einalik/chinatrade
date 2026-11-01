@@ -1,12 +1,14 @@
 """
 China B2B Multi-Platform Connector.
 Interfaces with verified factory networks and wholesale platforms:
+- Alibaba.com (International B2B Wholesale)
+- 1688 (Alibaba Domestic)
+- AliExpress (Global Wholesale & Sample Orders)
 - EHSY (西域 - ehsy.com)
 - Gongchang (中国工厂网 - gongchang.com)
 - Makepolo (马可波罗 - makepolo.com)
 - QiPeiRen (汽配人 - qipeiren.com)
 - Nala (nala.com.cn)
-- 1688 (Alibaba Domestic)
 - YiwuGo (义乌购 - yiwugo.com)
 - Baidu Aicai (百度爱采购 - b2b.baidu.com)
 - ChemNet (china.chemnet.com)
@@ -21,6 +23,30 @@ class ChinaB2BConnector(BaseConnector):
     def __init__(self):
         super().__init__(name="ChinaB2BMulti", base_url="https://www.1688.com")
         self.platforms_info = {
+            "alibaba": {
+                "name": "Alibaba.com (International B2B)",
+                "base_url": "https://www.alibaba.com",
+                "search_template": "https://www.alibaba.com/trade/search?SearchText={query}",
+                "category_focus": "بزرگ‌ترین پلتفرم بین‌المللی عمده‌فروشی B2B، قراردادهای کانتینری و کارخانجات دارای Trade Assurance",
+                "status": ConnectorStatus.LIVE_VERIFIED,
+                "notes": "اتصال زنده تایید شده - لینک مستقیم استعلام عمده‌فروشی بین‌المللی"
+            },
+            "1688": {
+                "name": "1688.com (Alibaba Domestic)",
+                "base_url": "https://www.1688.com",
+                "search_template": "https://s.1688.com/selloffer/offer_search.htm?keywords={query}",
+                "category_focus": "بزرگ‌ترین پلتفرم عمده‌فروشی داخلی چین؛ قیمت‌های بدون واسطه درب کارخانه (واحد پول RMB)",
+                "status": ConnectorStatus.LIVE_VERIFIED,
+                "notes": "لینک عمیق جستجوی مستقیم عمده‌فروشی کارخانجات (بدون کارمزد صادراتی)"
+            },
+            "aliexpress": {
+                "name": "AliExpress (خرید نمونه و تست بازار)",
+                "base_url": "https://www.aliexpress.com",
+                "search_template": "https://www.aliexpress.com/wholesale?SearchText={query}",
+                "category_focus": "خرید نمونه (Sample Orders)، سفارشات با تیراژ پایین و تست اولیه تقاضای بازار",
+                "status": ConnectorStatus.LIVE_VERIFIED,
+                "notes": "اتصال زنده تایید شده - بررسی مشخصات کاتالوگ و اعتبارسنجی قیمت خرد"
+            },
             "ehsy": {
                 "name": "EHSY (西域)",
                 "base_url": "https://www.ehsy.com",
@@ -61,14 +87,6 @@ class ChinaB2BConnector(BaseConnector):
                 "status": ConnectorStatus.DECOMMISSIONED_OR_DOWN,
                 "notes": "سرور عمومی وب با کد 503 یا انقضای دامنه مواجه است"
             },
-            "1688": {
-                "name": "1688.com (Alibaba Domestic)",
-                "base_url": "https://www.1688.com",
-                "search_template": "https://s.1688.com/selloffer/offer_search.htm?keywords={query}",
-                "category_focus": "کلیه محصولات مصرفی، الکترونیک، مد، ابزار و سخت‌افزار",
-                "status": ConnectorStatus.LIVE_VERIFIED,
-                "notes": "لینک عمیق جستجوی مستقیم عمده‌فروشی کارخانجات"
-            },
             "yiwugo": {
                 "name": "YiwuGo (义乌购)",
                 "base_url": "https://www.yiwugo.com",
@@ -95,14 +113,17 @@ class ChinaB2BConnector(BaseConnector):
             }
         }
 
-    def generate_search_links(self, chinese_query: str) -> Dict[str, Dict[str, Any]]:
+    def generate_search_links(self, chinese_query: str, english_query: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """
         Generates direct, verified deep-search links across all platforms for manual or bot inspection.
+        For international platforms (Alibaba, AliExpress), uses English query if provided for optimal accuracy.
         """
-        encoded_q = urllib.parse.quote(chinese_query)
+        encoded_cn = urllib.parse.quote(chinese_query)
+        encoded_en = urllib.parse.quote(english_query) if english_query else encoded_cn
         results = {}
         for key, p in self.platforms_info.items():
-            direct_url = p["search_template"].format(query=encoded_q)
+            target_kw = encoded_en if (key in ["alibaba", "aliexpress"] and english_query) else encoded_cn
+            direct_url = p["search_template"].format(query=target_kw)
             results[key] = {
                 "name": p["name"],
                 "url": direct_url,
