@@ -30,8 +30,12 @@ from core.report_generator import ReportGenerator
 from core.db import Database
 from connectors.manual_entry import ManualQuotationParser
 from core.models import DataType
+from trade_hub.router import trade_hub_router
 
 app = FastAPI(title="iTrade China Enterprise API", version="2.1.0")
+
+# Mount Trade Intelligence Hub router (Completely isolated module)
+app.include_router(trade_hub_router, prefix="/api/trade-hub", tags=["Trade Intelligence Hub"])
 
 os.makedirs("static", exist_ok=True)
 os.makedirs("reports", exist_ok=True)
