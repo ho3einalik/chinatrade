@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iTrade • سامانه هوشمند آربیتراژ و تحلیل واردات از چین به ایران</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vazirmatn Persian Font -->
+    <link href="https://cdn.jsdelivr.net/npm/vazirmatn@33.0.3/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Vazirmatn', 'sans-serif'],
+                    },
+                    colors: {
+                        matte: '#121316',
+                        cardLight: '#ffffff',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: radial-gradient(circle at 15% 15%, #f5f7fb 0%, #e8edf5 50%, #dbe2ed 100%);
+            min-height: 100vh;
+            color: #14171f;
+        }
+        .glass-canvas {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.05);
+        }
+        .glass-card {
+            background: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.03);
+            border-radius: 24px;
+        }
+        .matte-card {
+            background: #121316;
+            color: #ffffff;
+            border-radius: 24px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+        }
+        .circle-score {
+            width: 95px;
+            height: 95px;
+            border-radius: 50%;
+            border: 5px solid #121316;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="p-3 md:p-6 flex items-center justify-center">
+
+    <!-- کانتینر شیشه‌ای اصلی مطابق تصویر مرجع (Main Canvas) -->
+    <div class="glass-canvas w-full max-w-[1440px] rounded-[32px] p-5 md:p-8 flex flex-col lg:flex-row gap-6 relative overflow-hidden">
+
+        <!-- منوی باریک کپسولی سمت راست (RTL Sidebar) -->
+        <aside class="w-full lg:w-64 flex flex-col justify-between shrink-0 bg-white/75 backdrop-blur-md rounded-[26px] p-5 border border-white/80 shadow-sm">
+            <div>
+                <!-- لوگو برند -->
+                <div class="flex items-center gap-3 mb-8">
+                    <div class="w-10 h-10 bg-matte text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-sm">
+                        ✦
+                    </div>
+                    <div>
+                        <div class="font-black text-lg text-matte tracking-tight">iTrade China</div>
+                        <div class="text-[11px] text-slate-400 font-semibold">سامانه سورسینگ و آربیتراژ</div>
+                    </div>
+                </div>
+
+                <!-- آیتم‌های ناوبری به صورت کپسولی (Pills) -->
+                <nav class="space-y-2">
+                    <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full text-right px-4 py-3 rounded-full text-sm font-bold flex items-center gap-3 transition-all bg-matte text-white shadow-md">
+                        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                        <span>داشبورد تحلیلی کالا</span>
+                    </button>
+                    <button onclick="switchTab('sources')" id="nav-sources" class="w-full text-right px-4 py-3 rounded-full text-sm font-semibold flex items-center gap-3 transition-all text-slate-500 hover:text-matte hover:bg-white/80">
+                        <i data-lucide="network" class="w-4 h-4"></i>
+                        <span>سورس‌های چین و ایران</span>
+                    </button>
+                    <button onclick="switchTab('opportunities')" id="nav-opportunities" class="w-full text-right px-4 py-3 rounded-full text-sm font-semibold flex items-center gap-3 transition-all text-slate-500 hover:text-matte hover:bg-white/80">
+                        <i data-lucide="radar" class="w-4 h-4"></i>
+                        <span>رادار فرصت‌های پرسود</span>
+                    </button>
+                    <button onclick="switchTab('calculator')" id="nav-calculator" class="w-full text-right px-4 py-3 rounded-full text-sm font-semibold flex items-center gap-3 transition-all text-slate-500 hover:text-matte hover:bg-white/80">
+                        <i data-lucide="calculator" class="w-4 h-4"></i>
+                        <span>ماشین‌حساب سریع گمرک</span>
+                    </button>
+                    <button onclick="switchTab('guide')" id="nav-guide" class="w-full text-right px-4 py-3 rounded-full text-sm font-semibold flex items-center gap-3 transition-all text-slate-500 hover:text-matte hover:bg-white/80">
+                        <i data-lucide="book-open" class="w-4 h-4"></i>
+                        <span>راهنمای خرید و ترخیص</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- ویجت نرخ‌های ارز در پایین منو -->
+            <div class="mt-8 pt-5 border-t border-slate-100">
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">نرخ‌های زنده حواله و کرایه</div>
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between items-center py-1">
+                        <span class="text-slate-500">حواله یوان چین:</span>
+                        <span class="font-extrabold text-matte" id="rate-rmb">14,200 ت</span>
+                    </div>
+                    <div class="flex justify-between items-center py-1">
+                        <span class="text-slate-500">دلار آزاد:</span>
+                        <span class="font-extrabold text-matte" id="rate-usd">102,000 ت</span>
+                    </div>
+                    <div class="flex justify-between items-center py-1">
+                        <span class="text-slate-500">کارگو هوایی:</span>
+                        <span class="font-extrabold text-matte" id="rate-air">$12.0 / kg</span>
+                    </div>
+                    <div class="flex justify-between items-center py-1">
+                        <span class="text-slate-500">کارگو دریایی:</span>
+                        <span class="font-extrabold text-matte" id="rate-sea">$110 / CBM</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- فضای اصلی داشبورد (Main Dashboard Area) -->
+        <main class="flex-1 flex flex-col gap-6">
+
+            <!-- هدر سلام و جستجو (دقیقاً مشابه عکس) -->
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-extrabold text-matte">سلام، واردکننده عزیز! 🇨🇳 ➡️ 🇮🇷</h1>
+                    <p class="text-xs md:text-sm text-slate-400 mt-1">سورسینگ چندمنبعی چین (1688، EHSY، Gongchang، Makepolo، QiPeiRen) • استعلام بازار ایران (دیجی‌کالا، ترب، ایمالز، باسلام، دیوار)</p>
+                </div>
+
+                <!-- باکس جستجو و دکمه کپسولی + تحلیل -->
+                <div class="flex items-center gap-2 max-w-md w-full">
+                    <div class="relative flex-1">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="productSearchInput" value="ساعت هوشمند" placeholder="نام کالا (مثلاً: ایرپاد، لنت ترمز، دریل، پودر PVC...)" 
+                               class="w-full pr-11 pl-4 py-3 bg-white/95 border border-slate-200/80 rounded-full text-sm font-medium focus:outline-none focus:ring-2 focus:ring-matte shadow-sm">
+                    </div>
+                    <button onclick="handleSearch()" class="px-5 py-3 bg-matte hover:bg-black text-white text-sm font-bold rounded-full shadow-md transition-all shrink-0 flex items-center gap-2">
+                        <span>+ تحلیل کالا</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- پیل‌های انتخاب سریع با ۱ کلیک -->
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="text-xs text-slate-400 font-semibold ml-2">کالاهای پرطرفدار:</span>
+                <button onclick="setQueryAndSearch('ساعت هوشمند اولترا')" class="px-4 py-1.5 bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold rounded-full border border-slate-200/80 shadow-xs transition-all">⌚ ساعت هوشمند</button>
+                <button onclick="setQueryAndSearch('هندزفری بلوتوثی نویزکنسلینگ ANC')" class="px-4 py-1.5 bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold rounded-full border border-slate-200/80 shadow-xs transition-all">🎧 ایرپاد نویزکنسلینگ</button>
+                <button onclick="setQueryAndSearch('لنت ترمز سرامیکی خودرو')" class="px-4 py-1.5 bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold rounded-full border border-slate-200/80 shadow-xs transition-all">🚗 لنت ترمز (قطعات خودرو)</button>
+                <button onclick="setQueryAndSearch('دریل شارژی براشلس ۲۱ ولت')" class="px-4 py-1.5 bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold rounded-full border border-slate-200/80 shadow-xs transition-all">🪛 دریل شارژی (EHSY صنعتی)</button>
+                <button onclick="setQueryAndSearch('ماساژور تفنگی شارژی')" class="px-4 py-1.5 bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold rounded-full border border-slate-200/80 shadow-xs transition-all">💆 ماساژور تفنگی</button>
+                <button onclick="setQueryAndSearch('پودر PVC گرید S65')" class="px-4 py-1.5 bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold rounded-full border border-slate-200/80 shadow-xs transition-all">🛢️ پودر PVC پتروشیمی</button>
+            </div>
+
+            <!-- نشانگر جستجوی زنده (Live Search Progress State) -->
+            <div id="searchProgressIndicator" class="hidden bg-white/85 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-sm transition-all">
+                <div class="flex items-center gap-3">
+                    <div class="w-5 h-5 border-2 border-matte border-t-transparent rounded-full animate-spin shrink-0"></div>
+                    <div class="text-sm font-bold text-matte" id="searchStepText">در حال استعلام زنده قیمت‌ها و رقبا در بازار ایران...</div>
+                </div>
+            </div>
+
+            <!-- محتوای تب ۱: داشبورد تحلیل -->
+            <div id="tab-dashboard" class="space-y-6">
+
+                <!-- ردیف اول: ۳ کارت هدر دقیقا مطابق تصویر مرجع -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-5">
+
+                    <!-- کارت ۱: مشکی مات (Overall Information) -->
+                    <div class="md:col-span-5 matte-card p-6 flex flex-col justify-between relative">
+                        <div>
+                            <div class="flex justify-between items-center text-slate-400 text-xs font-bold mb-4">
+                                <span>اطلاعات کلی کالا (Overall Information)</span>
+                                <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+                            </div>
+                            <div class="flex justify-between items-baseline">
+                                <div>
+                                    <div class="text-2xl lg:text-3xl font-black text-white" id="card1-net-profit">۸۴۰,۰۰۰ تومان</div>
+                                    <div class="text-[12px] text-slate-400 mt-1">سود خالص هر واحد در ایران (دریایی)</div>
+                                </div>
+                                <div class="text-left">
+                                    <div class="text-2xl lg:text-3xl font-black text-sky-400" id="card1-roi">۹۲.۴٪</div>
+                                    <div class="text-[12px] text-slate-400 mt-1">نرخ بازگشت سرمایه</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ۳ باکس کوچک سفید زیر کارت مشکی دقیقا مطابق تصویر -->
+                        <div class="grid grid-cols-3 gap-2.5 mt-6">
+                            <div class="bg-white rounded-2xl p-3 text-center shadow-sm">
+                                <div class="text-base font-extrabold text-matte" id="card1-box-china">۴۸ ¥</div>
+                                <div class="text-[10px] text-slate-500 font-bold mt-1">فاکتور چین</div>
+                            </div>
+                            <div class="bg-white rounded-2xl p-3 text-center shadow-sm">
+                                <div class="text-base font-extrabold text-matte" id="card1-box-landed">۹۰۹,۰۰۰ ت</div>
+                                <div class="text-[10px] text-slate-500 font-bold mt-1">بهای تمام‌شده</div>
+                            </div>
+                            <div class="bg-white rounded-2xl p-3 text-center shadow-sm">
+                                <div class="text-base font-extrabold text-matte" id="card1-box-sell">۱,۷۵۰,۰۰۰ ت</div>
+                                <div class="text-[10px] text-slate-500 font-bold mt-1">فروش در ایران</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- کارت ۲: سفید شیشه‌ای (آنالیز هوایی و دریایی) -->
+                    <div class="md:col-span-4 glass-card p-6 flex flex-col justify-between">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-700 mb-3">
+                            <span>آنالیز دو روش حمل (Air vs Sea)</span>
+                            <span class="bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full text-[10px]" id="card2-hscode">HS: 8517.62.90</span>
+                        </div>
+                        <div class="space-y-2.5 text-xs">
+                            <div class="flex justify-between py-1 border-b border-slate-100">
+                                <span class="text-slate-500">کرایه حمل کالا:</span>
+                                <span class="font-bold text-slate-800" id="card2-shipping">هوایی ۲۲۰ هزار ت | دریایی ۷ هزار ت</span>
+                            </div>
+                            <div class="flex justify-between py-1 border-b border-slate-100">
+                                <span class="text-slate-500">گمرک + سود بازرگانی:</span>
+                                <span class="font-bold text-slate-800" id="card2-customs">۱۰۳,۷۰۰ تومان</span>
+                            </div>
+                            <div class="flex justify-between py-1 border-b border-slate-100">
+                                <span class="text-slate-500">مالیات ارزش افزوده (۱۰٪):</span>
+                                <span class="font-bold text-slate-800" id="card2-vat">۷۹,۵۰۰ تومان</span>
+                            </div>
+                            <div class="flex justify-between py-1 border-b border-slate-100">
+                                <span class="text-slate-500">ترخیص و حمل داخلی:</span>
+                                <span class="font-bold text-slate-800" id="card2-clearance">۳۸,۰۰۰ تومان</span>
+                            </div>
+                            <div class="flex justify-between p-2.5 bg-slate-50 rounded-xl">
+                                <span class="font-bold text-matte">حاشیه سود هوایی vs دریایی:</span>
+                                <span class="font-black text-matte" id="card2-margins">۲۴٪ vs ۴۸٪</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- کارت ۳: سفید شیشه‌ای با نشان دایره‌ای و دکمه دانلود کپسولی -->
+                    <div class="md:col-span-3 glass-card p-6 flex flex-col justify-between text-center">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
+                            <span>امتیاز جذابیت فرصت</span>
+                            <i data-lucide="trending-up" class="w-4 h-4 text-emerald-500"></i>
+                        </div>
+                        <div class="py-2">
+                            <div class="circle-score mx-auto shadow-xs">
+                                <span class="text-2xl font-black text-matte" id="card3-score">9.5</span>
+                                <span class="text-[9px] font-bold text-slate-400">از ۱۰ امتیاز</span>
+                            </div>
+                            <div class="text-xs font-bold text-emerald-600 mt-2" id="card3-margin-badge">+۴۸٪ سود خالص نهایی</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">تقاضای بالا در بازار ایران</div>
+                        </div>
+                        <!-- دکمه کپسولی دانلود گزارش مشابه عکس -->
+                        <button onclick="downloadReport()" class="w-full py-3 bg-matte hover:bg-black text-white text-xs font-bold rounded-full shadow-md flex items-center justify-center gap-2 transition-all">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                            <span>دانلود شناسنامه کامل</span>
+                        </button>
+                    </div>
+
+                </div>
+
+                <!-- ردیف دوم: کارخانه‌های چین و تفکیک کانال‌های بازار ایران -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-5">
+
+                    <!-- کارخانه‌های چین (EHSY, Gongchang, Makepolo, QiPeiRen, 1688, ChemNet) -->
+                    <div class="md:col-span-6 glass-card p-6">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-700 mb-4">
+                            <span>کارخانه‌ها و سورس‌های چین (China Sourcing Platforms)</span>
+                            <span class="text-[11px] text-slate-400 font-normal">1688 • EHSY • Gongchang • Makepolo</span>
+                        </div>
+                        <div class="space-y-3" id="chinaSuppliersList">
+                            <!-- به صورت پویا با جاوااسکریپت پر می‌شود -->
+                        </div>
+                    </div>
+
+                    <!-- پایش تفکیکی بازار ایران در کانال‌های مختلف -->
+                    <div class="md:col-span-6 glass-card p-6 flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-center text-xs font-bold text-slate-700 mb-4">
+                                <span>قیمت فروش در کانال‌های بازار ایران (Iran Sales Channels)</span>
+                                <span class="bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                                    <span>دیجی‌کالا • ترب • ایمالز • باسلام • دیوار</span>
+                                </span>
+                            </div>
+
+                            <!-- آمار سرجمع بازار -->
+                            <div class="bg-slate-50 rounded-2xl p-4 grid grid-cols-3 gap-2 text-center text-xs mb-4">
+                                <div>
+                                    <span class="text-slate-400 text-[11px]">کف قیمت:</span>
+                                    <div class="font-extrabold text-matte text-sm" id="iran-low">۱,۲۵۰,۰۰۰ ت</div>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 text-[11px]">میانگین بازار:</span>
+                                    <div class="font-extrabold text-matte text-sm" id="iran-avg">۱,۶۸۰,۰۰۰ ت</div>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 text-[11px]">فروشندگان فعال:</span>
+                                    <div class="font-extrabold text-matte text-sm" id="iran-sellers">۳۵ مغازه</div>
+                                </div>
+                            </div>
+
+                            <!-- لیست تفکیکی کانال‌ها -->
+                            <div class="space-y-2.5" id="iranChannelsList">
+                                <!-- کانال‌های فروش با قیمت و لینک مستقیم -->
+                            </div>
+
+                            <!-- مجوزهای گمرکی -->
+                            <div class="mt-4 pt-3 border-t border-slate-100 space-y-1 text-[11px] text-slate-600" id="iranRegulationsList">
+                                <!-- الزامات رگولاتوری -->
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- محتوای تب جدید: سورس‌های چین و ایران + تست سلامت -->
+            <div id="tab-sources" class="hidden space-y-5">
+                <div class="glass-card p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 class="text-lg font-extrabold text-matte">🌐 سورس‌های یکپارچه‌شده سورسینگ چین و فروش ایران</h2>
+                            <p class="text-xs text-slate-400 mt-1">بررسی وضعیت سلامت، اعتبار و پروتکل ارتباطی با سایت‌های معرفی‌شده شما و پلتفرم‌های مکمل</p>
+                        </div>
+                        <span class="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold">۹ پلتفرم چین + ۶ کانال ایران</span>
+                    </div>
+
+                    <!-- بخش سورس‌های چین -->
+                    <div class="mb-8">
+                        <h3 class="text-sm font-black text-slate-800 mb-3 flex items-center gap-2">
+                            <span>🇨🇳 پلتفرم‌های کارخانه‌ای و سورسینگ چین:</span>
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <!-- EHSY -->
+                            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div class="flex justify-between items-center mb-1">
+                                    <a href="https://www.ehsy.com/" target="_blank" class="font-black text-sm text-matte hover:text-blue-600">西域 EHSY (www.ehsy.com)</a>
+                                    <span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">سالم • HTTP 200</span>
+                                </div>
+                                <p class="text-xs text-slate-500">غول MRO صنعتی چین: ابزارآلات برقی، اتوماسیون، تجهیزات کارخانه‌ای، ایمنی و ملزومات کارگاهی.</p>
+                            </div>
+
+                            <!-- Gongchang -->
+                            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div class="flex justify-between items-center mb-1">
+                                    <a href="https://www.gongchang.com/" target="_blank" class="font-black text-sm text-matte hover:text-blue-600">中国工厂网 Gongchang (www.gongchang.com)</a>
+                                    <span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">سالم • HTTP 200</span>
+                                </div>
+                                <p class="text-xs text-slate-500">شبکه کارخانه‌های چین: دایرکتوری مستقیم تولیدکنندگان صنعتی برای سفارش OEM/ODM بدون واسطه.</p>
+                            </div>
+
+                            <!-- Makepolo -->
+                            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div class="flex justify-between items-center mb-1">
+                                    <a href="https://www.makepolo.com/" target="_blank" class="font-black text-sm text-matte hover:text-blue-600">马可波罗 Makepolo (www.makepolo.com)</a>
+                                    <span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">سالم • HTTP 200</span>
+                                </div>
+                                <p class="text-xs text-slate-500">موتور جستجوی خرید B2B چین: استعلام قیمت عمده ابزار، قطعات الکترونیک، سخت‌افزار و خطوط تولید.</p>
+                            </div>
+
+                            <!-- QiPeiRen -->
+                            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div class="flex justify-between items-center mb-1">
+                                    <a href="https://www.qipeiren.com/" target="_blank" class="font-black text-sm text-matte hover:text-blue-600">汽配人 QiPeiRen (www.qipeiren.com)</a>
+                                    <span class="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full">فعال داخل چین • شبکه داخلی</span>
+                                </div>
+                                <p class="text-xs text-slate-500">مرجع شماره ۱ قطعات خودرو و ماشین‌آلات چین: لنت، دیسک، کمک‌فنر، تسمه، فیلتر (نیازمند وی‌چت / شبکه چین برای آی‌پی خارجی).</p>
+                            </div>
+
+                            <!-- Nala (وضعیت) -->
+                            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="font-black text-sm text-slate-700">娜拉美妆 Nala (www.nala.com.cn)</span>
+                                    <span class="px-2.5 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-bold rounded-full">سرور وب عمومی غیرفعال (503)</span>
+                                </div>
+                                <p class="text-xs text-slate-500">سایت وب عمومی نالا دچار خطای پروتکل SSL و ۵۰۳ است؛ جایگزین‌های معتبرتر آن: 1688 Meizhuang و پلتفرم‌های آرایشی گوانگجو اضافه شدند.</p>
+                            </div>
+
+                            <!-- 1688.com -->
+                            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div class="flex justify-between items-center mb-1">
+                                    <a href="https://www.1688.com/" target="_blank" class="font-black text-sm text-matte hover:text-blue-600">阿里巴巴 1688 (www.1688.com)</a>
+                                    <span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">رتبه ۱ سورسینگ چین</span>
+                                </div>
+                                <p class="text-xs text-slate-500">پلتفرم عمده‌فروشی داخلی علی‌بابا در چین؛ ۲۰٪ تا ۵۰٪ ارزان‌تر از سایت بین‌المللی Alibaba به یوان.</p>
+                            </div>
+
+                            <!-- YiwuGo -->
+                            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div class="flex justify-between items-center mb-1">
+                                    <a href="https://www.yiwugo.com/" target="_blank" class="font-black text-sm text-matte hover:text-blue-600">义乌购 YiwuGo (www.yiwugo.com)</a>
+                                    <span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">سالم • HTTP 200</span>
+                                </div>
+                                <p class="text-xs text-slate-500">پلتفرم رسمی بازار بین‌المللی ایوو: کالاهای خرد، لوازم خانگی و آشپزخانه، اسباب‌بازی و اکسسوری.</p>
+                            </div>
+
+                            <!-- Baidu Aicai -->
+                            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div class="flex justify-between items-center mb-1">
+                                    <a href="https://b2b.baidu.com/" target="_blank" class="font-black text-sm text-matte hover:text-blue-600">百度爱采购 Baidu B2B (b2b.baidu.com)</a>
+                                    <span class="px-2.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full">سالم • HTTP 200</span>
+                                </div>
+                                <p class="text-xs text-slate-500">پلتفرم رسمی هوش تجاری و تدارکات B2B موتور جستجوی بایدو برای خرید مستقیم از کارخانه‌های چین.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- بخش کانال‌های فروش در ایران -->
+                    <div>
+                        <h3 class="text-sm font-black text-slate-800 mb-3 flex items-center gap-2">
+                            <span>🇮🇷 کانال‌های رصد قیمت و فروش در بازار ایران:</span>
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="p-3.5 bg-white rounded-2xl border border-slate-100 shadow-xs">
+                                <div class="font-extrabold text-xs text-matte">دیجی‌کالا (Digikala)</div>
+                                <div class="text-[11px] text-slate-400 mt-1">بزرگ‌ترین مارکت‌پلیس آنلاین ایران با استعلام زنده API برای کف و سقف قیمت‌ها.</div>
+                            </div>
+                            <div class="p-3.5 bg-white rounded-2xl border border-slate-100 shadow-xs">
+                                <div class="font-extrabold text-xs text-matte">ترب (Torob)</div>
+                                <div class="text-[11px] text-slate-400 mt-1">موتور مقایسه قیمت میان بیش از ۱۰,۰۰۰ فروشگاه اینترنتی مستقل کشور.</div>
+                            </div>
+                            <div class="p-3.5 bg-white rounded-2xl border border-slate-100 shadow-xs">
+                                <div class="font-extrabold text-xs text-matte">ایمالز (Emalls)</div>
+                                <div class="text-[11px] text-slate-400 mt-1">مرجع مقایسه قیمت کالاها و معرفی فروشگاه‌های معتبر و تخصصی با نماد اعتماد.</div>
+                            </div>
+                            <div class="p-3.5 bg-white rounded-2xl border border-slate-100 shadow-xs">
+                                <div class="font-extrabold text-xs text-matte">باسلام (Basalam)</div>
+                                <div class="text-[11px] text-slate-400 mt-1">بازار اجتماعی غرفه‌داران و واردکنندگان مستقیم با قیمت‌های رقابتی و بدون کارمزد سنگین.</div>
+                            </div>
+                            <div class="p-3.5 bg-white rounded-2xl border border-slate-100 shadow-xs">
+                                <div class="font-extrabold text-xs text-matte">فروشگاه‌های تخصصی مستقل</div>
+                                <div class="text-[11px] text-slate-400 mt-1">تکنولایف، مقداد آی‌تی، جانبی، ابزارمارکت، زنبیل و سایت‌های تخصصی صنف مربوطه.</div>
+                            </div>
+                            <div class="p-3.5 bg-white rounded-2xl border border-slate-100 shadow-xs">
+                                <div class="font-extrabold text-xs text-matte">دیوار و شیپور (Divar)</div>
+                                <div class="text-[11px] text-slate-400 mt-1">رصد کف قیمت نقد معامله در بازار آزاد و بنکداری‌های حضوری تهران و شهرستان‌ها.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- محتوای تب ۳: شکار فرصت‌های وارداتی -->
+            <div id="tab-opportunities" class="hidden space-y-4">
+                <div class="glass-card p-6">
+                    <h2 class="text-lg font-extrabold text-matte mb-1">🚀 رادار شکار فرصت‌های وارداتی</h2>
+                    <p class="text-xs text-slate-400 mb-6">کالاهایی که بیشترین شکاف سودآوری (آربیتراژ) بین کارخانه‌های چین و بازار ایران را دارند</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+                        <button onclick="scanCategory('گجت‌ها و الکترونیک مصرفی')" class="p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 text-right font-bold text-xs border border-slate-200/60 transition-all flex justify-between items-center">
+                            <span>گجت‌ها و الکترونیک</span>
+                            <i data-lucide="arrow-left" class="w-4 h-4 text-slate-400"></i>
+                        </button>
+                        <button onclick="scanCategory('قطعات خودرو و لوازم یدکی')" class="p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 text-right font-bold text-xs border border-slate-200/60 transition-all flex justify-between items-center">
+                            <span>قطعات خودرو (QiPeiRen)</span>
+                            <i data-lucide="arrow-left" class="w-4 h-4 text-slate-400"></i>
+                        </button>
+                        <button onclick="scanCategory('ابزارآلات و صنعتی')" class="p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 text-right font-bold text-xs border border-slate-200/60 transition-all flex justify-between items-center">
+                            <span>ابزار و MRO صنعتی (EHSY)</span>
+                            <i data-lucide="arrow-left" class="w-4 h-4 text-slate-400"></i>
+                        </button>
+                        <button onclick="scanCategory('مواد اولیه و پتروشیمی')" class="p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 text-right font-bold text-xs border border-slate-200/60 transition-all flex justify-between items-center">
+                            <span>پتروشیمی و پلیمر (ChemNet)</span>
+                            <i data-lucide="arrow-left" class="w-4 h-4 text-slate-400"></i>
+                        </button>
+                    </div>
+
+                    <div id="opportunitiesList" class="space-y-3">
+                        <!-- لیست فرصت‌ها -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- محتوای تب ۴: ماشین‌حساب سریع گمرک -->
+            <div id="tab-calculator" class="hidden space-y-4">
+                <div class="glass-card p-6">
+                    <h2 class="text-lg font-extrabold text-matte mb-1">🧮 ماشین‌حساب سریع بهای تمام‌شده و سود</h2>
+                    <p class="text-xs text-slate-400 mb-6">هر پیش‌فاکتور از چین دارید اینجا وارد کنید تا در لحظه بهای تمام‌شده و سود هر عدد را محاسبه کند</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-2">قیمت فاکتور چین (یوان):</label>
+                            <input type="number" id="calcPriceCNY" value="35" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-2">وزن هر عدد با بسته‌بندی (kg):</label>
+                            <input type="number" id="calcWeight" value="0.25" step="0.05" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-2">قیمت فروش هدف در ایران (تومان):</label>
+                            <input type="number" id="calcSellingPrice" value="1350000" step="50000" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold">
+                        </div>
+                    </div>
+
+                    <button onclick="runQuickCalc()" class="px-6 py-3 bg-matte hover:bg-black text-white text-xs font-bold rounded-full shadow-md transition-all">
+                        محاسبه سودآوری
+                    </button>
+
+                    <div id="calcResults" class="mt-6 hidden">
+                        <!-- نتایج کارت مشکی سریع -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- محتوای تب ۵: راهنمای سورسینگ -->
+            <div id="tab-guide" class="hidden space-y-4">
+                <div class="glass-card p-6 space-y-4 text-xs leading-relaxed text-slate-600">
+                    <h2 class="text-lg font-extrabold text-matte mb-2">🇨🇳 راهنمای استراتژیک خرید از چین برای تجار ایرانی</h2>
+                    <p>• <strong>چرا ۱۶۸۸، EHSY و Gongchang؟</strong> این سایت‌ها قیمت‌های واقعی کارخانجات داخلی چین هستند و ۲۰٪ تا ۵۰٪ ارزان‌تر از خریدهای دلاری علی‌بابا تمام می‌شوند.</p>
+                    <p>• <strong>خرید بدون حساب بانکی چین:</strong> شرکت‌های کارگو ایرانی در گوانگجو، شنژن و ایوو خرید به یوان را انجام داده و کالا را در دبی یا ایران ترخیص می‌کنند.</p>
+                    <p>• <strong>پتروشیمی و پلیمر:</strong> پلتفرم‌های ChemNet مرجع اصلی قیمت‌های جهانی گریدهای مهندسی پتروشیمی هستند.</p>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- اسکریپت جاوااسکریپت برای فراخوانی API و رندر زنده -->
+    <script>
+        let currentReport = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            handleSearch();
+        });
+
+        function switchTab(tabId) {
+            ['dashboard', 'sources', 'opportunities', 'calculator', 'guide'].forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                const btn = document.getElementById(`nav-${t}`);
+                if (el && btn) {
+                    if (t === tabId) {
+                        el.classList.remove('hidden');
+                        btn.classList.add('bg-matte', 'text-white', 'shadow-md');
+                        btn.classList.remove('text-slate-500', 'hover:bg-white/80');
+                    } else {
+                        el.classList.add('hidden');
+                        btn.classList.remove('bg-matte', 'text-white', 'shadow-md');
+                        btn.classList.add('text-slate-500', 'hover:bg-white/80');
+                    }
+                }
+            });
+            lucide.createIcons();
+        }
+
+        function setQueryAndSearch(query) {
+            document.getElementById('productSearchInput').value = query;
+            handleSearch();
+        }
+
+        async function handleSearch() {
+            const query = document.getElementById('productSearchInput').value.trim();
+            if (!query) return;
+
+            const progressEl = document.getElementById('searchProgressIndicator');
+            const stepText = document.getElementById('searchStepText');
+            progressEl.classList.remove('hidden');
+
+            stepText.innerText = `🔍 در حال استعلام زنده «${query}» در دیجی‌کالا، ترب، ایمالز و باسلام...`;
+
+            try {
+                setTimeout(() => {
+                    stepText.innerText = `🏭 در حال سورسینگ در ۱۶۸۸، EHSY، Gongchang، Makepolo و پلتفرم‌های چین...`;
+                }, 350);
+
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ product: query })
+                });
+
+                stepText.innerText = `💰 در حال محاسبه هزینه‌های گمرکی، هوایی، دریایی و سود خالص...`;
+
+                const data = await response.json();
+                currentReport = data;
+                renderReport(data);
+
+                setTimeout(() => {
+                    progressEl.classList.add('hidden');
+                }, 450);
+
+            } catch (err) {
+                console.error('Error fetching data:', err);
+                progressEl.classList.add('hidden');
+            }
+        }
+
+        function renderReport(data) {
+            const sea = data.sea_cost_analysis;
+            const air = data.air_cost_analysis;
+            const market = data.iran_market;
+            const bestSup = data.best_supplier;
+
+            // کارت ۱ (مشکی مات)
+            document.getElementById('card1-net-profit').innerText = `${sea.net_profit_per_unit_toman.toLocaleString()} ت`;
+            document.getElementById('card1-roi').innerText = `${sea.roi_percent}%`;
+            document.getElementById('card1-box-china').innerText = `${air.purchase_price_cny} ¥`;
+            document.getElementById('card1-box-landed').innerText = `${Math.round(sea.total_landed_cost_toman / 1000)}k ت`;
+            document.getElementById('card1-box-sell').innerText = `${Math.round(market.average_price_toman / 1000)}k ت`;
+
+            // کارت ۲ (مقایسه هوایی و دریایی)
+            document.getElementById('card2-hscode').innerText = `HS: ${data.hs_code_estimate}`;
+            document.getElementById('card2-shipping').innerText = `هوایی ${Math.round(air.international_shipping_toman / 1000)}k ت | دریایی ${Math.round(sea.international_shipping_toman / 1000)}k ت`;
+            document.getElementById('card2-customs').innerText = `${(sea.customs_duty_toman + sea.commercial_benefit_toman).toLocaleString()} تومان`;
+            document.getElementById('card2-vat').innerText = `${sea.vat_toman.toLocaleString()} تومان`;
+            document.getElementById('card2-clearance').innerText = `${(sea.clearance_and_brokerage_toman + sea.domestic_logistics_toman).toLocaleString()} تومان`;
+            document.getElementById('card2-margins').innerText = `${air.profit_margin_percent}% vs ${sea.profit_margin_percent}%`;
+
+            // کارت ۳ (امتیاز فرصت)
+            document.getElementById('card3-score').innerText = data.opportunity_score;
+            document.getElementById('card3-margin-badge').innerText = `+${sea.profit_margin_percent}٪ سود خالص دریایی`;
+
+            // کارخانه‌های چین
+            const supList = document.getElementById('chinaSuppliersList');
+            supList.innerHTML = '';
+            data.suppliers_china.forEach((s, idx) => {
+                const item = document.createElement('div');
+                item.className = 'p-3.5 bg-slate-50 rounded-2xl flex justify-between items-center';
+                item.innerHTML = `
+                    <div>
+                        <div class="font-extrabold text-xs text-matte flex items-center gap-1.5">
+                            <span>${idx + 1}. ${s.name}</span>
+                            <a href="${s.source_url}" target="_blank" class="text-[10px] text-blue-500 hover:underline">↗</a>
+                        </div>
+                        <div class="text-[11px] text-slate-400 mt-0.5">
+                            <span class="font-bold text-slate-600">${s.platform}</span> • ${s.location}
+                        </div>
+                    </div>
+                    <div class="text-left">
+                        <span class="inline-block bg-matte text-white px-3 py-1 rounded-full text-xs font-bold">${s.unit_price_cny} ¥</span>
+                        <div class="text-[10px] text-slate-400 mt-1 font-semibold">حداقل: ${s.moq} عدد</div>
+                    </div>
+                `;
+                supList.appendChild(item);
+            });
+
+            // وضعیت بازار ایران
+            document.getElementById('iran-low').innerText = `${market.lowest_price_toman.toLocaleString()} ت`;
+            document.getElementById('iran-avg').innerText = `${market.average_price_toman.toLocaleString()} ت`;
+            document.getElementById('iran-sellers').innerText = `${market.active_sellers_count} فروشگاه`;
+
+            // رندر تفکیکی کانال‌های توزیع ایران
+            const channelsList = document.getElementById('iranChannelsList');
+            channelsList.innerHTML = '';
+            if (market.channels && market.channels.length > 0) {
+                market.channels.forEach(ch => {
+                    const chRow = document.createElement('div');
+                    chRow.className = 'p-2.5 bg-white border border-slate-100 rounded-xl flex justify-between items-center text-xs shadow-xs';
+                    chRow.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-slate-800">${ch.name}</span>
+                            ${ch.is_live ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.2 rounded font-bold">زنده</span>' : ''}
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-black text-matte">${ch.price_toman.toLocaleString()} ت</span>
+                            <a href="${ch.url}" target="_blank" class="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-full font-bold">استعلام</a>
+                        </div>
+                    `;
+                    channelsList.appendChild(chRow);
+                });
+            }
+
+            const regList = document.getElementById('iranRegulationsList');
+            regList.innerHTML = '';
+            data.regulatory_notes.slice(0, 3).forEach(note => {
+                const p = document.createElement('p');
+                p.className = 'flex items-center gap-1.5';
+                p.innerHTML = `<span class="text-emerald-500 font-bold">✔</span> <span>${note}</span>`;
+                regList.appendChild(p);
+            });
+
+            lucide.createIcons();
+        }
+
+        async function scanCategory(cat) {
+            const list = document.getElementById('opportunitiesList');
+            list.innerHTML = '<div class="text-center py-6 text-xs text-slate-400 font-bold">در حال پویش بازار و محاسبه آربیتراژ...</div>';
+            
+            try {
+                const resp = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ category: cat })
+                });
+                const data = await resp.json();
+                list.innerHTML = '';
+                data.forEach((op, idx) => {
+                    const row = document.createElement('div');
+                    row.className = 'p-4 bg-white rounded-2xl border border-slate-100 shadow-xs flex justify-between items-center';
+                    row.innerHTML = `
+                        <div>
+                            <div class="font-black text-sm text-matte">${idx + 1}. ${op.product_name_fa}</div>
+                            <div class="text-[11px] text-slate-400 mt-1">کارخانه چین: ${op.best_supplier ? op.best_supplier.name.substring(0, 30) : '-'}</div>
+                        </div>
+                        <div class="flex gap-4 text-center text-xs">
+                            <div>
+                                <div class="text-[10px] text-slate-400">بهای تمام‌شده</div>
+                                <div class="font-extrabold text-matte">${Math.round(op.sea_cost_analysis.total_landed_cost_toman / 1000)}k ت</div>
+                            </div>
+                            <div>
+                                <div class="text-[10px] text-slate-400">فروش در بازار</div>
+                                <div class="font-extrabold text-matte">${Math.round(op.iran_market.average_price_toman / 1000)}k ت</div>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="bg-matte text-white px-3.5 py-1.5 rounded-full text-xs font-bold">
+                                ${op.sea_cost_analysis.profit_margin_percent}٪ سود (ROI ${op.sea_cost_analysis.roi_percent}%)
+                            </span>
+                        </div>
+                    `;
+                    list.appendChild(row);
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function downloadReport() {
+            if (!currentReport) return;
+            window.open(`/api/download/${encodeURIComponent(currentReport.product_name_fa)}`, '_blank');
+        }
+    </script>
+</body>
+</html>

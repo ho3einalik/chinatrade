@@ -1,0 +1,23 @@
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Environment and sensitive tokens
+.env
+.env.local
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Generated reports folder (keep folder clean)
+reports/*.html
+reports/*.md
+!reports/.gitkeep
