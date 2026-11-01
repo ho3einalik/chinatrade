@@ -26,6 +26,7 @@ from trade_hub.network.repository import TradeNetworkRepository
 from trade_hub.matching.engine import TradeMatchingEngine
 from trade_hub.operations.cost_calculator import GlobalTradeCostCalculator
 from trade_hub.intelligence.ai_assistant import TradeAIAssistant
+from trade_hub.intelligence.domestic_buyers import IranDomesticBuyerEngine
 
 
 # High-demand export commodities HS knowledge base
@@ -293,6 +294,42 @@ EXPORT_HS_DATABASE: Dict[str, Dict[str, Any]] = {
         "default_cost_usd": Decimal("2750.00"),
         "unit": "Tons",
         "tariff_summary": "محاسبه قیمت بر اساس LME؛ بازار ترکیه و هند مقاصد اصلی صادرات بدون موانع تعرفه‌ای سنگین هستند."
+    },
+    "barley": {
+        "hs_code": "1003.90",
+        "title_en": "Barley (Feed & Malting Grain)",
+        "title_fa": "جو دامی و خوراکی",
+        "keywords": ["barley", "جو", "جو دامی", "جو خوراکی", "جو مالت", "دانه جو"],
+        "top_importers": ["Saudi Arabia", "China", "Iran", "Iraq", "Turkey"],
+        "avg_market_size_usd": Decimal("8500000000"),
+        "growth_pct": Decimal("4.8"),
+        "default_cost_usd": Decimal("220.00"),
+        "unit": "Tons",
+        "tariff_summary": "جو دامی در ایران و کشورهای منطقه مشمول معافیت یا حداقل حقوق گمرکی (۴٪) است. کنترل استاندارد رطوبت، افت مفید و پروتئین الزامی است."
+    },
+    "corn": {
+        "hs_code": "1005.90",
+        "title_en": "Maize (Corn) for Animal Feed",
+        "title_fa": "ذرت دامی و دانه‌ای",
+        "keywords": ["corn", "maize", "ذرت", "ذرت دامی"],
+        "top_importers": ["China", "Iran", "Turkey", "Iraq", "Egypt"],
+        "avg_market_size_usd": Decimal("38000000000"),
+        "growth_pct": Decimal("5.2"),
+        "default_cost_usd": Decimal("240.00"),
+        "unit": "Tons",
+        "tariff_summary": "مشمول نظارت سازمان دامپزشکی و قرنطینه نباتی، کنترل سقف آفلاتوکسین الزامی است."
+    },
+    "wheat": {
+        "hs_code": "1001.99",
+        "title_en": "Wheat and Meslin, Other",
+        "title_fa": "گندم خوراکی و دامی",
+        "keywords": ["wheat", "گندم", "گندم دامی", "گندم خوراکی"],
+        "top_importers": ["Egypt", "Indonesia", "Turkey", "Iran", "Algeria"],
+        "avg_market_size_usd": Decimal("54000000000"),
+        "growth_pct": Decimal("3.8"),
+        "default_cost_usd": Decimal("260.00"),
+        "unit": "Tons",
+        "tariff_summary": "کالای اساسی استراتژیک مشمول نظارت شرکت بازرگانی دولتی ایران و ذخایر ملی."
     }
 }
 
@@ -325,7 +362,29 @@ class SellerJourneyEngine:
         """
         Runs complete export market entry analysis.
         """
-        norm_name = product_name.lower().strip()
+        # Parse commodity and quantity intelligently (e.g. '3000 تن جو دارم' -> 'جو', 3000, 'تن')
+        parsed_prod, parsed_qty, parsed_unit = IranDomesticBuyerEngine.parse_commodity_query(product_name)
+        if parsed_qty and parsed_qty > Decimal("0") and (batch_quantity == Decimal("100") or batch_quantity is None):
+            batch_quantity = parsed_qty
+        if parsed_unit and any(u in parsed_unit.lower() for u in ["تن", "ton", "tons"]):
+            unit_name = "Tons"
+        elif parsed_unit:
+            unit_name = parsed_unit
+
+        clean_query = parsed_prod if parsed_prod else product_name
+        norm_name = f"{product_name} {clean_query}".lower().strip()
+
+        # Run Iranian domestic buyers & valuation analysis
+        domestic_summary = IranDomesticBuyerEngine.match_domestic_buyers(
+            product_query=product_name,
+            quantity=batch_quantity,
+            unit_name=unit_name
+        )
+
+        is_domestic_focus = (
+            target_country in [None, "", "Iran", "iran", "ایران", "داخل", "domestic"]
+            or any(w in product_name.lower() for w in ["ایرانی", "داخل", "ایران", "دارم"])
+        )
 
         # 1. Match or estimate HS code dynamically
         matched_kb = None
@@ -583,6 +642,13 @@ class SellerJourneyEngine:
         # Sort candidate buyers by score
         matched_buyers.sort(key=lambda m: m.overall_match_score, reverse=True)
 
+        # Incorporate domestic Iranian buyers when domestic focus or target is Iran
+        dom_buyers = domestic_summary.get("domestic_buyers", [])
+        if is_domestic_focus or (target_country and target_country.lower() in ["iran", "ایران"]):
+            final_candidate_buyers = dom_buyers + matched_buyers
+        else:
+            final_candidate_buyers = matched_buyers + dom_buyers
+
         # 4. Export Cost & Profitability Calculation
         export_cost_res = None
         if unit_cost_usd and unit_cost_usd > Decimal("0"):
@@ -608,14 +674,19 @@ class SellerJourneyEngine:
             incoterms=GlobalIncoterms.FOB
         )
 
+        pitch_fa = domestic_summary.get("draft_sales_offer_fa") if is_domestic_focus else pitches["pitch_fa"]
+
         # 6. Action Roadmap
-        roadmap = [
-            f"۱. تایید انطباق مشخصات فنی کالا با استانداردها و الزامات وارداتی کشور {primary_dest} (کد تعرفه {primary_hs})",
-            f"۲. بررسی تعرفه و توافق‌نامه‌های تجاری تفضیلی (TPO / موافقت‌نامه‌های ترجیحی)",
-            f"۳. برقراری ارتباط با خریداران بالقوه از طریق معرفی رسمی و ارائه کاتالوگ و دیتاشیت (TDS)",
-            f"۴. استعلام نرخ به‌روز حمل جاده‌ای/دریایی و صدور پیش‌فاکتور رسمی (Proforma Invoice)",
-            f"۵. هماهنگی امور اسنادی، صدور گواهی مبدا و ثبت معامله در CRM"
-        ]
+        if is_domestic_focus and domestic_summary.get("domestic_action_roadmap"):
+            roadmap = domestic_summary["domestic_action_roadmap"]
+        else:
+            roadmap = [
+                f"۱. تایید انطباق مشخصات فنی کالا با استانداردها و الزامات وارداتی کشور {primary_dest} (کد تعرفه {primary_hs})",
+                f"۲. بررسی تعرفه و توافق‌نامه‌های تجاری تفضیلی (TPO / موافقت‌نامه‌های ترجیحی)",
+                f"۳. برقراری ارتباط با خریداران بالقوه از طریق معرفی رسمی و ارائه کاتالوگ و دیتاشیت (TDS)",
+                f"۴. استعلام نرخ به‌روز حمل جاده‌ای/دریایی و صدور پیش‌فاکتور رسمی (Proforma Invoice)",
+                f"۵. هماهنگی امور اسنادی، صدور گواهی مبدا و ثبت معامله در CRM"
+            ]
 
         clean_hs = primary_hs.replace(".", "")
         tm_link = f"https://www.trademap.org/Country_SelProduct.aspx?nvpm=1|||||{clean_hs}|||2|1|1|1|1||2|1|1"
@@ -628,6 +699,7 @@ class SellerJourneyEngine:
             f"ITC Importers Directory (دایرکتوری خریداران): {tm_comp_link}",
             f"UN Comtrade Statistics: {comtrade_link}",
             f"ITC Market Access Map: {macmap_link}",
+            "بانک جامع خریداران و مصرف‌کنندگان صنعتی بازار ایران (Domestic Buyers Engine)",
             "سازمان توسعه تجارت ایران (TPO) - سامانه توافق‌نامه‌های تجاری ترجیحی",
             "اتاق مشترک بازرگانی ایران و عراق (پایانه‌های مرزی و تعرفه)",
             "شبکه اختصاصی مخاطبان کاربر (My Trade Network CRM)"
@@ -643,13 +715,15 @@ class SellerJourneyEngine:
             market_size_usd=market_size,
             annual_market_growth_pct=market_growth,
             tariff_barriers_summary=tariff_summary,
-            candidate_buyers=matched_buyers,
+            candidate_buyers=final_candidate_buyers,
             export_cost_estimate=export_cost_res,
             draft_sales_pitch_en=pitches["pitch_en"],
-            draft_sales_pitch_fa=pitches["pitch_fa"],
+            draft_sales_pitch_fa=pitch_fa,
             action_roadmap=roadmap,
-            data_confidence_score=88.5,
-            sources_cited=sources_cited
+            data_confidence_score=92.0 if is_domestic_focus else 88.5,
+            sources_cited=sources_cited,
+            domestic_buyers=dom_buyers,
+            domestic_market_summary=domestic_summary
         )
 
         # Persist in Trade Hub database

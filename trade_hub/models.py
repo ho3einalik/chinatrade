@@ -294,6 +294,11 @@ class EntityMatchResult(BaseModel):
     discrepancies: List[str] = Field(default_factory=list)
     unknown_parameters: List[str] = Field(default_factory=list)
     recommended_action: str = ""
+    buyer_type: Optional[str] = None
+    purchasing_capacity: Optional[str] = None
+    city_province: Optional[str] = None
+    payment_terms_expected: Optional[str] = None
+    contact_channel: Optional[str] = None
 
 
 # --------------------------------------------------------------------------
@@ -364,6 +369,8 @@ class MarketEntryDossier(BaseModel):
     action_roadmap: List[str] = Field(default_factory=list)
     data_confidence_score: float = 0.0
     sources_cited: List[str] = Field(default_factory=list)
+    domestic_buyers: List[EntityMatchResult] = Field(default_factory=list)
+    domestic_market_summary: Optional[Dict[str, Any]] = None
 
 
 class SourcingDossier(BaseModel):
